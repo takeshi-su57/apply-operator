@@ -1,8 +1,34 @@
 """Shared test fixtures for apply-operator."""
 
+from pathlib import Path
+
+import fitz  # PyMuPDF
 import pytest
 
 from apply_operator.state import ApplicationState, JobListing, ResumeData
+
+
+@pytest.fixture
+def sample_pdf(tmp_path: Path) -> Path:
+    """Create a test PDF with sample resume text."""
+    path = tmp_path / "resume.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "John Doe\njohn@example.com\nPython Developer")
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+@pytest.fixture
+def empty_pdf(tmp_path: Path) -> Path:
+    """Create a PDF with no text content."""
+    path = tmp_path / "empty.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(str(path))
+    doc.close()
+    return path
 
 
 @pytest.fixture
