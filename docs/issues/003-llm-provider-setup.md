@@ -37,12 +37,12 @@ print(response.content)              # "Hello!"
 
 ## Acceptance Criteria
 
-- [ ] `get_llm()` returns correct type for `openai`, `anthropic`, `google` providers
-- [ ] `ValueError` raised for unknown provider
-- [ ] `call_llm("Say hello")` returns a non-empty string with a real API key
-- [ ] Missing API key gives a clear error message
-- [ ] Tests pass with mocked providers
-- [ ] `ruff check` and `mypy` pass
+- [x] `get_llm()` returns correct type for `openai`, `anthropic`, `google` providers
+- [x] `ValueError` raised for unknown provider
+- [x] `call_llm("Say hello")` returns a non-empty string with a real API key
+- [x] Missing API key gives a clear error message
+- [x] Tests pass with mocked providers
+- [x] `ruff check` and `mypy` pass
 
 ## Files Touched
 

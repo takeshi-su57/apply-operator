@@ -53,3 +53,13 @@ def get_llm() -> BaseChatModel:
 
     msg = f"Unknown LLM provider: {settings.llm_provider}"
     raise ValueError(msg)
+
+
+def call_llm(prompt: str) -> str:
+    """Call the configured LLM with a prompt and return the response text.
+
+    Convenience wrapper around get_llm() that handles AIMessage extraction.
+    """
+    llm = get_llm()
+    response = llm.invoke(prompt)
+    return str(response.content)
