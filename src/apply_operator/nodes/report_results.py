@@ -2,11 +2,12 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 from apply_operator.state import ApplicationState
 
 
-def report_results(state: ApplicationState) -> dict:
+def report_results(state: ApplicationState) -> dict[str, Any]:
     """Save results to JSON and print summary.
 
     Writes application results to data/results.json for later review.

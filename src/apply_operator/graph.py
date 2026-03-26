@@ -1,6 +1,7 @@
 """LangGraph StateGraph assembly for the job application agent."""
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from apply_operator.nodes.analyze_fit import analyze_fit
 from apply_operator.nodes.fill_application import fill_application
@@ -28,7 +29,7 @@ def has_more_jobs(state: ApplicationState) -> str:
     return "done"
 
 
-def build_graph() -> StateGraph:
+def build_graph() -> CompiledStateGraph:  # type: ignore[type-arg]
     """Build and return the compiled job application agent graph.
 
     Flow:

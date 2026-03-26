@@ -8,7 +8,7 @@ AI agent that automates job applications. Provide a resume PDF and job site URLs
 - Automated job site browsing and listing discovery (Playwright)
 - LLM-powered resume-to-job fit scoring
 - Automated form filling and submission
-- Configurable LLM provider (OpenAI, Anthropic, Google)
+- Configurable LLM provider (OpenAI, Anthropic, Google, OpenRouter)
 - CLI with progress monitoring (Typer + Rich)
 - Results exported to JSON
 
@@ -18,11 +18,12 @@ AI agent that automates job applications. Provide a resume PDF and job site URLs
 |-----------|-----------|
 | Language | Python 3.12+ |
 | Agent Framework | LangGraph (StateGraph) |
-| LLM | LangChain (OpenAI / Anthropic / Google) |
+| LLM | LangChain (OpenAI / Anthropic / Google / OpenRouter) |
 | Browser Automation | Playwright (async) |
 | PDF Parsing | PyMuPDF |
 | CLI | Typer + Rich |
 | Config | Pydantic Settings + python-dotenv |
+| Package Manager | uv |
 | Linting | Ruff |
 | Type Checking | mypy (strict) |
 | Testing | pytest |
@@ -54,7 +55,8 @@ docs/                    # Architecture docs + ADRs
 ## Prerequisites
 
 - Python 3.12+
-- An LLM API key (OpenAI, Anthropic, or Google)
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+- An LLM API key (OpenAI, Anthropic, Google, or OpenRouter)
 
 ## Quick Start
 
@@ -62,10 +64,11 @@ docs/                    # Architecture docs + ADRs
 # Clone and install
 git clone <repo-url>
 cd apply-operator
-pip install -e ".[dev]"
+uv venv
+uv pip install -e ".[dev]"
 
 # Install browser binaries
-playwright install
+playwright install chromium
 
 # Configure environment
 cp .env.example .env
@@ -90,11 +93,13 @@ python -m apply_operator run --resume resume.pdf --urls job_urls.txt
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLM_PROVIDER` | `openai` | LLM provider: `openai`, `anthropic`, `google` |
+| `LLM_PROVIDER` | `openai` | LLM provider: `openai`, `anthropic`, `google`, `openrouter` |
 | `LLM_MODEL` | `gpt-4o` | Model name (provider-specific) |
 | `OPENAI_API_KEY` | — | OpenAI API key |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key |
 | `GOOGLE_API_KEY` | — | Google AI API key |
+| `OPENROUTER_API_KEY` | — | OpenRouter API key |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenRouter API base URL |
 | `BROWSER_HEADLESS` | `true` | Run browser in headless mode |
 | `LOG_LEVEL` | `INFO` | Logging level |
 

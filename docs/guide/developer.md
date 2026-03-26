@@ -7,9 +7,9 @@ How to set up, develop, and test apply-operator locally.
 | Requirement | Version | Check |
 |-------------|---------|-------|
 | Python | 3.12+ | `python --version` |
-| pip | latest | `pip --version` |
+| uv | latest | `uv --version` |
 | Git | any | `git --version` |
-| LLM API key | — | At least one: OpenAI, Anthropic, or Google |
+| LLM API key | — | At least one: OpenAI, Anthropic, Google, or OpenRouter |
 
 ## Initial Setup
 
@@ -23,7 +23,7 @@ cd apply-operator
 ### 2. Create a virtual environment
 
 ```bash
-python -m venv .venv
+uv venv
 
 # Activate it:
 # Linux/macOS
@@ -40,7 +40,7 @@ source .venv/Scripts/activate
 
 ```bash
 # Install package with dev dependencies
-pip install -e ".[dev]"
+uv pip install -e ".[dev]"
 
 # Install Playwright browser binaries
 playwright install chromium
@@ -55,9 +55,14 @@ cp .env.example .env
 Edit `.env` and add your LLM API key:
 
 ```bash
-LLM_PROVIDER=openai        # or: anthropic, google
+LLM_PROVIDER=openai        # or: anthropic, google, openrouter
 LLM_MODEL=gpt-4o           # model name for your provider
 OPENAI_API_KEY=sk-...       # your API key
+
+# Or use OpenRouter for access to many models via one key:
+# LLM_PROVIDER=openrouter
+# LLM_MODEL=anthropic/claude-sonnet-4-20250514
+# OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
 ### 5. Verify the setup
@@ -78,11 +83,13 @@ mypy src/
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `LLM_PROVIDER` | Yes | `openai` | LLM provider: `openai`, `anthropic`, `google` |
+| `LLM_PROVIDER` | Yes | `openai` | LLM provider: `openai`, `anthropic`, `google`, `openrouter` |
 | `LLM_MODEL` | Yes | `gpt-4o` | Model name (provider-specific) |
 | `OPENAI_API_KEY` | If provider=openai | — | OpenAI API key |
 | `ANTHROPIC_API_KEY` | If provider=anthropic | — | Anthropic API key |
 | `GOOGLE_API_KEY` | If provider=google | — | Google AI API key |
+| `OPENROUTER_API_KEY` | If provider=openrouter | — | OpenRouter API key |
+| `OPENROUTER_BASE_URL` | No | `https://openrouter.ai/api/v1` | OpenRouter API base URL |
 | `BROWSER_HEADLESS` | No | `true` | `false` to see browser during development |
 | `LOG_LEVEL` | No | `INFO` | `DEBUG` for verbose output |
 
@@ -139,7 +146,7 @@ BROWSER_HEADLESS=false python -m apply_operator run --resume resume.pdf --urls u
    ```python
    from apply_operator.state import ApplicationState
 
-   def my_node(state: ApplicationState) -> dict:
+   def my_node(state: ApplicationState) -> dict[str, Any]:
        # ... logic ...
        return {"field": value}
    ```
@@ -230,7 +237,7 @@ playwright install-deps chromium
 
 Make sure you installed in editable mode:
 ```bash
-pip install -e ".[dev]"
+uv pip install -e ".[dev]"
 ```
 
 ### LLM calls fail
