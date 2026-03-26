@@ -54,12 +54,12 @@ def sample_pdf(tmp_path):
 
 ## Acceptance Criteria
 
-- [ ] `extract_text()` returns text content from a valid PDF
-- [ ] `FileNotFoundError` raised for missing path
-- [ ] Empty string returned for PDF with no text
-- [ ] `python -m apply_operator parse-resume --resume sample.pdf` prints extracted text
-- [ ] Tests pass: valid PDF, missing file, empty PDF
-- [ ] `ruff check` and `mypy` pass
+- [x] `extract_text()` returns text content from a valid PDF
+- [x] `FileNotFoundError` raised for missing path
+- [x] Empty string returned for PDF with no text
+- [x] `python -m apply_operator parse-resume --resume sample.pdf` prints extracted text
+- [x] Tests pass: valid PDF, missing file, empty PDF
+- [x] `ruff check` and `mypy` pass
 
 ## Files Touched
 

@@ -1,6 +1,11 @@
 """Tests for PDF parsing utilities."""
 
+from pathlib import Path
+
+import pytest
+
 from apply_operator.state import ResumeData
+from apply_operator.tools.pdf_parser import extract_text
 
 
 class TestResumeData:
@@ -23,3 +28,24 @@ class TestResumeData:
         )
         assert data.name == "Jane Doe"
         assert len(data.skills) == 2
+
+
+class TestExtractText:
+    """Tests for the extract_text function."""
+
+    def test_extracts_text_from_valid_pdf(self, sample_pdf: Path) -> None:
+        """extract_text returns text content from a valid PDF."""
+        text = extract_text(str(sample_pdf))
+        assert "John Doe" in text
+        assert "john@example.com" in text
+        assert "Python Developer" in text
+
+    def test_raises_on_missing_file(self, tmp_path: Path) -> None:
+        """extract_text raises FileNotFoundError for a nonexistent path."""
+        with pytest.raises(FileNotFoundError):
+            extract_text(str(tmp_path / "nonexistent.pdf"))
+
+    def test_returns_empty_for_empty_pdf(self, empty_pdf: Path) -> None:
+        """extract_text returns empty string for a PDF with no text."""
+        text = extract_text(str(empty_pdf))
+        assert text.strip() == ""

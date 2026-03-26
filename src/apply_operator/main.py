@@ -62,8 +62,15 @@ def parse_resume(
         console.print(f"[red]Resume file not found: {resume}[/red]")
         raise typer.Exit(code=1)
 
-    # TODO: Call pdf_parser and LLM extraction
-    console.print("[yellow]Resume parsing not yet implemented.[/yellow]")
+    from apply_operator.tools.pdf_parser import extract_text
+
+    text = extract_text(str(resume))
+    if not text.strip():
+        console.print("[yellow]No text content found in the PDF.[/yellow]")
+        return
+
+    console.print(f"[bold cyan]Extracted text[/bold cyan] ({len(text)} chars):\n")
+    console.print(text)
 
 
 def _print_results(state: dict[str, Any]) -> None:
