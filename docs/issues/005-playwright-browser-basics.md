@@ -1,71 +1,95 @@
-# [Feature]: Implement Playwright browser tool and helpers
+# [Feature]: Implement Playwright browser tool with session persistence and user intervention
 
 **Labels:** `enhancement`, `priority:high`
 **Depends on:** [001](001-project-setup-and-verify.md)
 
 ## Description
 
-Implement and verify the browser automation tool (`tools/browser.py`) with Playwright. Add helper functions for common operations: extracting page text, getting links, taking screenshots. This is foundational for job searching (issue 006) and form filling (issue 009).
+Implement the browser automation tool (`tools/browser.py`) with Playwright. Beyond basic helpers, this must support **session persistence** (save/load cookies per domain) and a **user intervention flow** (pause automation, show browser, wait for user to handle login or CAPTCHA, then resume).
 
 ## Motivation
 
-- Job applications require interacting with real web pages — Playwright controls a real browser
+- Job sites require authentication — instead of managing per-site credentials, the agent detects login walls and lets the user log in manually
+- Saved sessions (`data/sessions/<domain>.json`) avoid repeated manual logins across runs
+- Bot detection (CAPTCHA, verification) is inevitable — the agent must gracefully hand off to the user
 - Helper functions reduce boilerplate in every node that uses the browser
-- Learning async Playwright patterns here avoids debugging them during complex node work
 
 ## Proposed Solution
 
-- Verify existing `get_browser()` and `get_page()` context managers work
-- Add helpers: `get_page_text(page)`, `get_page_links(page)`, `take_screenshot(page, name)`
-- Create a manual test script (`scripts/test_browser.py`) to visually verify
-- Write automated tests with mocked Playwright
+### Session persistence
 
-### Key Playwright concepts
+Use Playwright's `storage_state` to save/load cookies + localStorage per domain:
 
 ```python
-from playwright.async_api import async_playwright
+from pathlib import Path
 
-async with async_playwright() as p:
-    browser = await p.chromium.launch(headless=True)
-    page = await browser.new_page()
-    await page.goto("https://example.com")
-    title = await page.title()
-    text = await page.text_content("body")
-    await page.fill('input[name="email"]', "john@example.com")
-    await page.click('button[type="submit"]')
-    await page.screenshot(path="screenshot.png")
-    await browser.close()
+SESSIONS_DIR = Path("data/sessions")
+
+def session_path(url: str) -> Path:
+    """Get session file path for a domain."""
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc
+    return SESSIONS_DIR / f"{domain}.json"
+
+async def get_page_with_session(url: str) -> AsyncGenerator[Page, None]:
+    """Create a page with saved session if available."""
+    path = session_path(url)
+    context_kwargs = {}
+    if path.exists():
+        context_kwargs["storage_state"] = str(path)
+    # ... create context with kwargs
+    yield page
+    # Save session after use
+    state = await context.storage_state()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state))
 ```
 
-### Important: async nodes in LangGraph
+### User intervention flow
 
-LangGraph handles async nodes automatically:
+When login or CAPTCHA is detected, pause and notify user via CLI:
+
 ```python
-async def my_node(state: ApplicationState) -> dict:
-    async with get_page() as page:
-        await page.goto(url)
-    return {"field": value}
+async def wait_for_user(page: Page, message: str) -> None:
+    """Show browser to user, print message, wait for Enter to resume."""
+    console.print(f"[bold yellow]{message}[/bold yellow]")
+    console.print("[dim]Complete the action in the browser, then press Enter...[/dim]")
+    await asyncio.get_event_loop().run_in_executor(None, input)
 ```
+
+### Browser helpers
+
+- `get_page_text(page)` — extract visible text content
+- `get_page_links(page)` — return list of `{href, text}` dicts
+- `take_screenshot(page, name)` — save to `data/screenshots/`
+
+### Important: headed mode for auth
+
+During login/CAPTCHA flows, the browser **must** be visible (`headless=False`) so the user can interact. The `get_page_with_session` context manager should launch in headed mode when user intervention might be needed.
 
 ## Alternatives Considered
 
-- **Selenium** — older, slower, less reliable than Playwright
-- **Puppeteer** — Node.js only, Playwright is its Python successor
+- **Per-site credentials in config** — fragile, can't handle Google OAuth or 2FA
+- **Automated CAPTCHA solving** — unreliable, may violate site terms
+- **No session persistence** — forces manual login every run
 
 ## Acceptance Criteria
 
 - [ ] `get_page()` opens and closes a browser cleanly
+- [ ] `get_page_with_session(url)` loads saved session if available
+- [ ] Sessions saved to `data/sessions/<domain>.json` after page use
+- [ ] Expired sessions detected (login wall still present after loading session)
+- [ ] `wait_for_user(page, message)` pauses automation and shows browser
 - [ ] `get_page_text(page)` returns visible text content
 - [ ] `get_page_links(page)` returns list of `{href, text}` dicts
 - [ ] `take_screenshot(page, name)` saves to `data/screenshots/`
 - [ ] Both headless and headed mode work (`BROWSER_HEADLESS=true/false`)
-- [ ] `scripts/test_browser.py` loads a page and prints the title
 - [ ] Tests pass with mocked Playwright
 - [ ] `ruff check` and `mypy` pass
 
 ## Files Touched
 
-- `src/apply_operator/tools/browser.py` — add helper functions
+- `src/apply_operator/tools/browser.py` — session persistence, user intervention, helpers
 - `scripts/test_browser.py` — create manual test
 - `tests/test_browser.py` — create
 

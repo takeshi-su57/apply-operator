@@ -2,21 +2,29 @@
 
 Sequential issues for building the apply-operator agent. Each issue builds on the previous ones.
 
+## Design Principles
+
+- **No per-site credentials** — the agent detects login walls and prompts the user to log in manually
+- **Session persistence** — cookies saved to `data/sessions/<domain>.json`, reused across runs
+- **User intervention** — when CAPTCHA or bot detection occurs, the agent pauses for the user to handle it
+- **Real-user browsing** — the agent navigates pages, clicks through listings, and handles pagination like a human would
+- **LLM-assisted understanding** — the agent uses LLM to understand arbitrary page layouts, not hardcoded selectors
+
 ## Phase 1: Foundation (do these first, in order)
 
 | # | Issue | Depends on | What you'll learn |
 |---|-------|-----------|-------------------|
-| [001](001-project-setup-and-verify.md) | Project Setup & Verify | — | Python toolchain, editable installs, Typer CLI |
+| [001](001-project-setup-and-verify.md) | Project Setup & Verify | — | Python toolchain, uv, editable installs, Typer CLI |
 | [002](002-pdf-text-extraction.md) | PDF Text Extraction | 001 | PyMuPDF, first tool implementation |
-| [003](003-llm-provider-setup.md) | LLM Provider Setup | 001 | LangChain, factory pattern, API keys |
+| [003](003-llm-provider-setup.md) | LLM Provider Setup | 001 | LangChain, factory pattern, API keys, OpenRouter |
 | [004](004-resume-structured-extraction.md) | Resume Structured Extraction | 002, 003 | **First LangGraph node**, LLM prompting, JSON parsing |
-| [005](005-playwright-browser-basics.md) | Playwright Browser Basics | 001 | Async programming, browser automation |
+| [005](005-playwright-browser-basics.md) | Playwright + Session Persistence | 001 | Async browser automation, session save/load, user intervention |
 
 ## Phase 2: Core Pipeline (parallel tracks merge at 008)
 
 | # | Issue | Depends on | What you'll learn |
 |---|-------|-----------|-------------------|
-| [006](006-search-jobs-node.md) | Search Jobs Node | 005 | LLM-assisted scraping, async nodes |
+| [006](006-search-jobs-node.md) | Search Jobs Node | 005 | Login detection, LLM-assisted scraping, pagination, real-user flow |
 | [007](007-analyze-fit-node.md) | Analyze Fit Node | 003, 004 | Conditional routing, state updates |
 | [008](008-minimal-graph-integration.md) | **Minimal Graph Integration** | 004, 006, 007 | **LangGraph wiring**, streaming, end-to-end flow |
 
@@ -24,7 +32,7 @@ Sequential issues for building the apply-operator agent. Each issue builds on th
 
 | # | Issue | Depends on | What you'll learn |
 |---|-------|-----------|-------------------|
-| [009](009-fill-application-node.md) | Fill Application Node | 005, 008 | Form automation, LLM-guided interaction |
+| [009](009-fill-application-node.md) | Fill Application Node | 005, 008 | Form automation, LLM-guided interaction, CAPTCHA handling |
 | [010](010-cli-progress-and-reporting.md) | CLI Progress & Reporting | 008 | Rich Live display, graph streaming |
 
 ## Phase 4: Hardening
@@ -42,7 +50,7 @@ Sequential issues for building the apply-operator agent. Each issue builds on th
 | [014](014-cover-letter-generation.md) | Cover Letter Generation | 007 | Adding nodes to existing graph |
 | [015](015-comprehensive-testing.md) | Comprehensive Testing | 009 | Test strategy, coverage, mocking |
 | [016](016-ci-pipeline.md) | CI Pipeline | 015 | GitHub Actions |
-| [017](017-job-site-adapters.md) | Job Site Adapters | 009 | Adapter pattern, site-specific automation |
+| [017](017-job-site-adapters.md) | Job Site Adapters | 009 | Adapter pattern, site-specific automation (no credentials) |
 
 ## Dependency Graph
 
@@ -53,13 +61,13 @@ Sequential issues for building the apply-operator agent. Each issue builds on th
  ├── 003 LLM Provider       │
  │    ├── 004 Resume Node    │
  │    └── 007 Fit Analysis ──┤
- └── 005 Playwright          │
-      ├── 006 Job Search ────┤
+ └── 005 Browser + Sessions  │
+      ├── 006 Job Search ────┤  (login detection, pagination, real-user flow)
       └─────────────────┐    │
                         │    │
                  008 Graph Integration ← MILESTONE: first working pipeline
                   │    │    │
-                  │    009 Form Filling ← MILESTONE: full agent
+                  │    009 Form Filling ← MILESTONE: full agent (+ CAPTCHA handling)
                   │    │
                   ├── 010 Progress UI
                   ├── 011 Error Handling
@@ -68,7 +76,31 @@ Sequential issues for building the apply-operator agent. Each issue builds on th
                   ├── 014 Cover Letters
                   ├── 015 Full Testing
                   │    └── 016 CI
-                  └── 017 Site Adapters
+                  └── 017 Site Adapters (no credentials — uses shared sessions)
+```
+
+## Agent Browsing Flow
+
+This is the core flow the agent follows for each job site URL:
+
+```
+1. Load saved session for domain (if exists)
+2. Visit job site URL
+3. Detect: logged in or login required?
+   → Login required → Show browser, prompt user, save session after login
+   → Already logged in → Continue
+4. Find job listings on the page
+5. For each job listing:
+   a. Open the job details
+   b. Analyze fit against resume (LLM)
+   c. Fit good → Enter apply flow → Handle CAPTCHA if needed → Fill form → Submit
+   d. Fit bad → Skip, go to next job
+6. All jobs on current page processed?
+   → Find pagination / "Load more" button
+   → Exists → Click it, go back to step 4
+   → None → Done with this site
+7. Repeat for next job site URL
+8. Report results
 ```
 
 ## How to Use These Issues

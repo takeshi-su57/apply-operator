@@ -1,9 +1,11 @@
 """Node: Fill and submit a job application form."""
 
+from typing import Any
+
 from apply_operator.state import ApplicationState
 
 
-def fill_application(state: ApplicationState) -> dict:
+def fill_application(state: ApplicationState) -> dict[str, Any]:
     """Use Playwright + LLM to fill out the job application form.
 
     Navigates to the application page, identifies form fields,

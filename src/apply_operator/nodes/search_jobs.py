@@ -1,9 +1,11 @@
 """Node: Search job sites for relevant listings."""
 
+from typing import Any
+
 from apply_operator.state import ApplicationState
 
 
-def search_jobs(state: ApplicationState) -> dict:
+def search_jobs(state: ApplicationState) -> dict[str, Any]:
     """Navigate to job site URLs and scrape job listings.
 
     Uses Playwright to browse each URL and extract job postings.

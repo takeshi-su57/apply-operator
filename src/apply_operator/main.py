@@ -1,6 +1,7 @@
 """CLI entry point for the job application agent."""
 
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -35,7 +36,7 @@ def run(
         console.print("[red]No URLs found in the file.[/red]")
         raise typer.Exit(code=1)
 
-    console.print(f"[bold cyan]apply-operator[/bold cyan]")
+    console.print("[bold cyan]apply-operator[/bold cyan]")
     console.print(f"  Resume: {resume}")
     console.print(f"  Job URLs: {len(job_urls)} sites")
     console.print()
@@ -65,7 +66,7 @@ def parse_resume(
     console.print("[yellow]Resume parsing not yet implemented.[/yellow]")
 
 
-def _print_results(state: dict) -> None:  # type: ignore[type-arg]
+def _print_results(state: dict[str, Any]) -> None:
     """Print a summary table of application results."""
     table = Table(title="Application Results")
     table.add_column("Job Title", style="cyan")

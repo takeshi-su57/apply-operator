@@ -5,13 +5,14 @@
 
 ## Description
 
-Add specialized adapters for popular job sites that handle site-specific quirks: login requirements, anti-bot protections, multi-step application flows, and custom form components.
+Add specialized adapters for popular job sites that handle site-specific quirks: custom UI components, multi-step application flows (e.g., LinkedIn Easy Apply), and non-standard page structures. Adapters improve reliability for common platforms while the generic LLM approach remains the fallback.
 
 ## Motivation
 
 - The generic LLM-assisted approach (issues 006, 009) works for simple sites but struggles with major platforms
-- LinkedIn, Indeed, and Glassdoor have login walls, custom UI components, and API-loaded content
+- LinkedIn, Indeed, and Glassdoor have custom UI components and API-loaded content
 - Site-specific adapters improve reliability for the most common job sites
+- All authentication is handled by the shared session system (issue 005) — adapters don't manage credentials
 
 ## Proposed Solution
 
@@ -21,14 +22,12 @@ Add specialized adapters for popular job sites that handle site-specific quirks:
 # tools/adapters/base.py
 class JobSiteAdapter:
     domain: str
-    async def login(self, page, credentials): ...
-    async def search_jobs(self, page, query) -> list[JobListing]: ...
+    async def search_jobs(self, page) -> list[JobListing]: ...
     async def fill_application(self, page, resume, job) -> bool: ...
-
-# tools/adapters/__init__.py
-def get_adapter(url: str) -> JobSiteAdapter | None:
-    """Return site-specific adapter, or None for generic handling."""
+    async def find_next_page(self, page) -> bool: ...
 ```
+
+**Note:** No `login()` method — authentication is handled by the shared session persistence and user intervention system from issue 005. Adapters assume the user is already logged in.
 
 ### Adapter registry
 
@@ -36,30 +35,33 @@ Nodes check for an adapter first, fall back to generic LLM-assisted approach:
 ```python
 adapter = get_adapter(url)
 if adapter:
-    jobs = await adapter.search_jobs(page, query)
+    jobs = await adapter.search_jobs(page)
 else:
     jobs = await generic_llm_search(page)
 ```
 
-### Site credentials
+### No per-site credentials
 
-Add to config and `.env.example`:
-- `LINKEDIN_EMAIL`, `LINKEDIN_PASSWORD`
-- `INDEED_EMAIL`, `INDEED_PASSWORD`
+All authentication goes through the shared flow:
+1. Agent visits site → detects login wall → prompts user
+2. User logs in manually → session saved to `data/sessions/<domain>.json`
+3. Adapters operate on the already-authenticated page
+
+Adapters only handle site-specific **navigation and extraction** — not authentication.
 
 ## Alternatives Considered
 
 - **Generic-only approach** — simpler but unreliable for major sites with custom UIs
+- **Per-site credentials in config** — rejected; shared session system handles all auth
 - **Job board APIs** — most are paid or restricted; browser automation covers all sites
-- **Browser extension** — requires user installation; CLI-only is more portable
 
 ## Acceptance Criteria
 
 - [ ] Adapter base class and registry created
-- [ ] LinkedIn adapter works for Easy Apply flow
-- [ ] Indeed adapter works for multi-step applications
+- [ ] LinkedIn adapter works for Easy Apply flow (assumes user already logged in)
+- [ ] Indeed adapter works for multi-step applications (assumes user already logged in)
 - [ ] Unknown sites fall back to generic LLM approach
-- [ ] Site credentials stored in env vars (never hardcoded)
+- [ ] No credentials stored in config or env vars — auth uses shared session system
 - [ ] Tests pass for each adapter with mocked Playwright
 - [ ] `ruff check` and `mypy` pass
 
@@ -72,10 +74,9 @@ Add to config and `.env.example`:
   - `indeed.py` — Indeed adapter
 - `src/apply_operator/nodes/search_jobs.py` — use adapter if available
 - `src/apply_operator/nodes/fill_application.py` — use adapter if available
-- `src/apply_operator/config.py` — add site credentials
-- `.env.example` — add site credential placeholders
 - `tests/test_adapters/` — create
 
 ## Related Issues
 
 - Blocked by [009](009-fill-application-node.md)
+- Uses session system from [005](005-playwright-browser-basics.md)

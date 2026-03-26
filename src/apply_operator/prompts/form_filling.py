@@ -1,6 +1,7 @@
 """Prompts for application form field mapping."""
 
-MAP_FORM_FIELDS = """You are filling out a job application form. Given the form fields and candidate data, determine the best value for each field.
+MAP_FORM_FIELDS = """You are filling out a job application form.
+Given the form fields and candidate data, determine the best value for each field.
 
 ## Form Fields (label: field_type)
 {form_fields}

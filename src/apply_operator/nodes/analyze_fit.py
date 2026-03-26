@@ -1,9 +1,11 @@
 """Node: Analyze fit between resume and current job listing."""
 
+from typing import Any
+
 from apply_operator.state import ApplicationState
 
 
-def analyze_fit(state: ApplicationState) -> dict:
+def analyze_fit(state: ApplicationState) -> dict[str, Any]:
     """Use LLM to score how well the resume matches the current job.
 
     Returns a fit score (0.0 to 1.0) for the current job listing.

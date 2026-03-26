@@ -15,6 +15,7 @@ AI agent that automates job applications. User provides a resume PDF and job sit
 | PDF Parsing | PyMuPDF (fitz) |
 | CLI | Typer + Rich |
 | Config | Pydantic Settings + python-dotenv |
+| Package Manager | uv |
 | Linting | Ruff |
 | Type Checking | mypy (strict) |
 | Testing | pytest + pytest-asyncio |
@@ -67,7 +68,8 @@ docs/                      → Architecture docs, guides, ADRs
 ## Key Commands
 
 ```bash
-pip install -e ".[dev]"    # Install with dev dependencies
+uv venv                    # Create virtual environment
+uv pip install -e ".[dev]" # Install with dev dependencies
 python -m apply_operator run --resume resume.pdf --urls urls.txt  # Run agent
 python -m apply_operator parse-resume --resume resume.pdf         # Parse resume only
 pytest                     # Run tests
