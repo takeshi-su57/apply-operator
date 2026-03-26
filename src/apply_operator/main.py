@@ -1,11 +1,21 @@
 """CLI entry point for the job application agent."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import typer
 from rich.console import Console
+from rich.logging import RichHandler
 from rich.table import Table
+
+from apply_operator.config import get_settings
+
+logging.basicConfig(
+    level=get_settings().log_level,
+    format="%(name)s | %(message)s",
+    handlers=[RichHandler(rich_tracebacks=True, show_path=False)],
+)
 
 app = typer.Typer(
     name="apply-operator",
@@ -62,15 +72,49 @@ def parse_resume(
         console.print(f"[red]Resume file not found: {resume}[/red]")
         raise typer.Exit(code=1)
 
-    from apply_operator.tools.pdf_parser import extract_text
+    from apply_operator.nodes.parse_resume import parse_resume as _parse_resume
+    from apply_operator.state import ApplicationState
 
-    text = extract_text(str(resume))
-    if not text.strip():
-        console.print("[yellow]No text content found in the PDF.[/yellow]")
-        return
+    state = ApplicationState(resume_path=str(resume))
+    result = _parse_resume(state)
+    resume_data = result.get("resume")
 
-    console.print(f"[bold cyan]Extracted text[/bold cyan] ({len(text)} chars):\n")
-    console.print(text)
+    if result.get("errors"):
+        for err in result["errors"]:
+            console.print(f"[yellow]{err}[/yellow]")
+
+    if resume_data is None:
+        console.print("[red]Failed to parse resume.[/red]")
+        raise typer.Exit(code=1)
+
+    table = Table(title="Resume Data")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+
+    table.add_row("Name", resume_data.name or "[dim]—[/dim]")
+    table.add_row("Email", resume_data.email or "[dim]—[/dim]")
+    table.add_row("Phone", resume_data.phone or "[dim]—[/dim]")
+    table.add_row("Skills", ", ".join(resume_data.skills) if resume_data.skills else "[dim]—[/dim]")
+    table.add_row("Summary", resume_data.summary or "[dim]—[/dim]")
+
+    for i, exp in enumerate(resume_data.experience, 1):
+        title = exp.get("title", "")
+        company = exp.get("company", "")
+        duration = exp.get("duration", "")
+        description = exp.get("description") or ""
+        # Count sentences (split on . ! ?)
+        sentences = [s for s in description.replace("•", ".").split(".") if s.strip()]
+        header = f"[bold]{title}[/bold] @ {company} ({duration})"
+        detail = f"{description}\n[dim]({len(sentences)} details)[/dim]" if description else ""
+        table.add_row(f"Experience {i}", f"{header}\n{detail}" if detail else header)
+
+    for edu in resume_data.education:
+        degree = edu.get("degree", "")
+        institution = edu.get("institution", "")
+        year = edu.get("year", "")
+        table.add_row("Education", f"{degree}, {institution} ({year})")
+
+    console.print(table)
 
 
 def _print_results(state: dict[str, Any]) -> None:

@@ -1,9 +1,14 @@
 """Configurable LLM provider factory."""
 
+import logging
+import time
+
 from langchain_core.language_models import BaseChatModel
 from pydantic import SecretStr
 
 from apply_operator.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def get_llm() -> BaseChatModel:
@@ -17,10 +22,11 @@ def get_llm() -> BaseChatModel:
     if settings.llm_provider == "openai":
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(
+        return ChatOpenAI(  # type: ignore[call-arg]
             model=settings.llm_model,
             api_key=SecretStr(settings.openai_api_key),
             temperature=0.3,
+            max_tokens=settings.llm_max_tokens,
         )
 
     if settings.llm_provider == "anthropic":
@@ -30,6 +36,7 @@ def get_llm() -> BaseChatModel:
             model_name=settings.llm_model,
             api_key=SecretStr(settings.anthropic_api_key),
             temperature=0.3,
+            max_tokens=settings.llm_max_tokens,
         )
 
     if settings.llm_provider == "google":
@@ -39,16 +46,18 @@ def get_llm() -> BaseChatModel:
             model=settings.llm_model,
             google_api_key=settings.google_api_key,
             temperature=0.3,
+            max_output_tokens=settings.llm_max_tokens,
         )
 
     if settings.llm_provider == "openrouter":
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(
+        return ChatOpenAI(  # type: ignore[call-arg]
             model=settings.llm_model,
             api_key=SecretStr(settings.openrouter_api_key),
             base_url=settings.openrouter_base_url,
             temperature=0.3,
+            max_tokens=settings.llm_max_tokens,
         )
 
     msg = f"Unknown LLM provider: {settings.llm_provider}"
@@ -60,6 +69,17 @@ def call_llm(prompt: str) -> str:
 
     Convenience wrapper around get_llm() that handles AIMessage extraction.
     """
+    settings = get_settings()
     llm = get_llm()
+
+    logger.info(
+        "LLM call starting | provider=%s model=%s",
+        settings.llm_provider,
+        settings.llm_model,
+    )
+    start = time.perf_counter()
     response = llm.invoke(prompt)
+    elapsed = time.perf_counter() - start
+    logger.info("LLM call finished | %.2fs", elapsed)
+
     return str(response.content)
