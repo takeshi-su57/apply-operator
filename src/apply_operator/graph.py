@@ -1,5 +1,7 @@
 """LangGraph StateGraph assembly for the job application agent."""
 
+from typing import Any
+
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -12,11 +14,16 @@ from apply_operator.state import ApplicationState
 
 
 def should_apply(state: ApplicationState) -> str:
-    """Route based on fit score: apply or skip to next job."""
-    if state.current_job_index >= len(state.jobs):
+    """Route based on fit score: apply or skip to next job.
+
+    analyze_fit scores the job at current_job_index without advancing.
+    This function checks that scored job and routes accordingly.
+    """
+    idx = state.current_job_index
+    if idx >= len(state.jobs):
         return "report"
 
-    current_job = state.jobs[state.current_job_index]
+    current_job = state.jobs[idx]
     if current_job.fit_score >= 0.6:
         return "apply"
     return "skip"
@@ -29,13 +36,21 @@ def has_more_jobs(state: ApplicationState) -> str:
     return "done"
 
 
+def skip_job(state: ApplicationState) -> dict[str, Any]:
+    """Advance past a low-scoring job, incrementing the skip counter."""
+    return {
+        "current_job_index": state.current_job_index + 1,
+        "total_skipped": state.total_skipped + 1,
+    }
+
+
 def build_graph() -> CompiledStateGraph:  # type: ignore[type-arg]
     """Build and return the compiled job application agent graph.
 
     Flow:
         START -> parse_resume -> search_jobs -> analyze_fit
-            -> [fit >= 0.6] -> fill_application -> advance -> analyze_fit (loop)
-            -> [fit < 0.6] -> advance -> analyze_fit (loop)
+            -> [fit >= 0.6] -> fill_application -> (loop or report)
+            -> [fit < 0.6] -> skip_job -> analyze_fit (loop)
             -> [no more jobs] -> report_results -> END
     """
     graph = StateGraph(ApplicationState)
@@ -44,6 +59,7 @@ def build_graph() -> CompiledStateGraph:  # type: ignore[type-arg]
     graph.add_node("parse_resume", parse_resume)
     graph.add_node("search_jobs", search_jobs)
     graph.add_node("analyze_fit", analyze_fit)
+    graph.add_node("skip_job", skip_job)
     graph.add_node("fill_application", fill_application)
     graph.add_node("report_results", report_results)
 
@@ -52,16 +68,19 @@ def build_graph() -> CompiledStateGraph:  # type: ignore[type-arg]
     graph.add_edge("parse_resume", "search_jobs")
     graph.add_edge("search_jobs", "analyze_fit")
 
-    # Conditional: analyze_fit -> apply or skip
+    # Conditional: analyze_fit -> apply, skip, or report
     graph.add_conditional_edges(
         "analyze_fit",
         should_apply,
         {
             "apply": "fill_application",
-            "skip": "analyze_fit",  # advance index and re-enter
+            "skip": "skip_job",
             "report": "report_results",
         },
     )
+
+    # skip_job advances index and loops back to analyze next job
+    graph.add_edge("skip_job", "analyze_fit")
 
     # After application, loop back to analyze next job
     graph.add_conditional_edges(

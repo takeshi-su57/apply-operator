@@ -224,7 +224,9 @@ class TestFindNextPage:
 
         assert result is True
         mock_element.click.assert_called_once()
-        page.wait_for_load_state.assert_called_once_with("networkidle")
+        # First call: domcontentloaded (navigation), second: networkidle (wait_for_page_ready)
+        calls = page.wait_for_load_state.call_args_list
+        assert calls[0].args == ("domcontentloaded",)
 
     @pytest.mark.asyncio
     async def test_returns_false_when_no_pagination(self) -> None:

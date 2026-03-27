@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from apply_operator.prompts.resume_analysis import PARSE_RESUME
 from apply_operator.state import ApplicationState, ResumeData
 from apply_operator.tools.llm_provider import call_llm
+from apply_operator.tools.logging_utils import log_node
 from apply_operator.tools.pdf_parser import extract_text
 
 
@@ -20,6 +21,7 @@ def _strip_markdown_json(text: str) -> str:
     return text.strip()
 
 
+@log_node
 def parse_resume(state: ApplicationState) -> dict[str, Any]:
     """Extract text from resume PDF and parse into structured fields.
 
@@ -29,7 +31,7 @@ def parse_resume(state: ApplicationState) -> dict[str, Any]:
     prompt = PARSE_RESUME.format(resume_text=raw_text)
 
     try:
-        response = call_llm(prompt)
+        response = call_llm(prompt, purpose="parse_resume")
         cleaned = _strip_markdown_json(response)
 
         data = json.loads(cleaned)

@@ -10,8 +10,14 @@ from playwright.async_api import Page
 from apply_operator.config import get_settings
 from apply_operator.prompts.job_matching import EXTRACT_JOBS
 from apply_operator.state import ApplicationState, JobListing
-from apply_operator.tools.browser import get_page_text, get_page_with_session, wait_for_user
+from apply_operator.tools.browser import (
+    get_page_text,
+    get_page_with_session,
+    wait_for_page_ready,
+    wait_for_user,
+)
 from apply_operator.tools.llm_provider import call_llm
+from apply_operator.tools.logging_utils import log_node
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +59,7 @@ async def _extract_jobs_from_page(page: Page, url: str) -> list[JobListing]:
         return []
 
     prompt = EXTRACT_JOBS.format(page_text=text[:8000], url=url)
-    response = call_llm(prompt)
+    response = call_llm(prompt, purpose=f"extract_jobs from {url}")
     cleaned = _strip_markdown_json(response)
 
     try:
@@ -90,12 +96,14 @@ async def _find_next_page(page: Page) -> bool:
             if element and await element.is_visible():
                 await element.click()
                 await page.wait_for_load_state("domcontentloaded")
+                await wait_for_page_ready(page)
                 return True
         except Exception:
             continue
     return False
 
 
+@log_node
 async def search_jobs(state: ApplicationState) -> dict[str, Any]:
     """Navigate to job site URLs and scrape job listings.
 
@@ -117,9 +125,11 @@ async def search_jobs(state: ApplicationState) -> dict[str, Any]:
                     wait_until="domcontentloaded",
                 )
 
+                await wait_for_page_ready(page)
                 logger.info("Page loaded, checking for login wall")
                 if await _detect_login_required(page):
                     await wait_for_user(page, f"Login required at {url}. Please log in.")
+                    await wait_for_page_ready(page)
 
                 logger.info("Extracting jobs from %s", url)
                 while True:

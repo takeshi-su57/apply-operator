@@ -124,14 +124,19 @@ def _print_results(state: dict[str, Any]) -> None:
     table.add_column("Status", style="yellow")
 
     for job in state.get("jobs", []):
-        status = "Applied" if job.get("applied") else "Skipped"
-        error = job.get("error", "")
+        title = job.title if hasattr(job, "title") else job.get("title", "Unknown")
+        company = job.company if hasattr(job, "company") else job.get("company", "Unknown")
+        fit_score = job.fit_score if hasattr(job, "fit_score") else job.get("fit_score", 0)
+        applied = job.applied if hasattr(job, "applied") else job.get("applied", False)
+        error = job.error if hasattr(job, "error") else job.get("error", "")
+
+        status = "Applied" if applied else "Skipped"
         if error:
             status = f"Error: {error}"
         table.add_row(
-            job.get("title", "Unknown"),
-            job.get("company", "Unknown"),
-            f"{job.get('fit_score', 0):.0%}",
+            title or "Unknown",
+            company or "Unknown",
+            f"{fit_score:.0%}",
             status,
         )
 

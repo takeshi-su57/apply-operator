@@ -1,6 +1,5 @@
 """Tests for browser automation tools."""
 
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -21,19 +20,19 @@ class TestSessionPath:
 
     def test_returns_path_for_simple_url(self) -> None:
         result = session_path("https://linkedin.com/jobs")
-        assert result == Path("data/sessions/linkedin.com.json")
+        assert result == Path("data/sessions/linkedin.com")
 
     def test_handles_url_with_port(self) -> None:
         result = session_path("http://localhost:8080/page")
-        assert result == Path("data/sessions/localhost:8080.json")
+        assert result == Path("data/sessions/localhost:8080")
 
     def test_handles_subdomain(self) -> None:
         result = session_path("https://jobs.lever.co/company")
-        assert result == Path("data/sessions/jobs.lever.co.json")
+        assert result == Path("data/sessions/jobs.lever.co")
 
     def test_handles_url_with_path_and_query(self) -> None:
         result = session_path("https://example.com/path?q=1")
-        assert result == Path("data/sessions/example.com.json")
+        assert result == Path("data/sessions/example.com")
 
 
 class TestGetBrowser:
@@ -55,7 +54,11 @@ class TestGetBrowser:
         async with get_browser() as browser:
             assert browser is mock_browser
 
-        mock_pw.chromium.launch.assert_called_once_with(headless=True)
+        mock_pw.chromium.launch.assert_called_once_with(
+            headless=True,
+            channel="chrome",
+            args=["--disable-blink-features=AutomationControlled"],
+        )
 
     @patch("apply_operator.tools.browser.get_settings")
     @patch("apply_operator.tools.browser.async_playwright")
@@ -105,113 +108,112 @@ class TestGetPage:
 
 
 class TestGetPageWithSession:
-    """Tests for get_page_with_session context manager."""
+    """Tests for get_page_with_session context manager.
 
-    @patch("apply_operator.tools.browser._get_browser_headed")
-    async def test_loads_existing_session(
-        self, mock_browser_headed: MagicMock, tmp_path: Path
+    The implementation uses Playwright's launch_persistent_context with a
+    per-domain user data directory. Sessions are preserved by the browser
+    profile, not by explicit JSON storage_state files.
+    """
+
+    @patch("apply_operator.tools.browser.async_playwright")
+    async def test_launches_persistent_context_with_domain_dir(
+        self, mock_playwright: MagicMock, tmp_path: Path
     ) -> None:
-        # Create a session file
-        session_file = tmp_path / "example.com.json"
-        session_data = {"cookies": [{"name": "sid", "value": "abc"}]}
-        session_file.write_text(json.dumps(session_data))
-
-        mock_browser = AsyncMock()
+        user_data_dir = tmp_path / "example.com"
         mock_context = AsyncMock()
         mock_page = AsyncMock()
-        mock_browser.new_context.return_value = mock_context
-        mock_context.new_page.return_value = mock_page
-        mock_context.storage_state.return_value = session_data
-        mock_browser_headed.return_value.__aenter__.return_value = mock_browser
+        mock_context.pages = [mock_page]
 
-        with patch("apply_operator.tools.browser.session_path", return_value=session_file):
+        mock_pw = AsyncMock()
+        mock_pw.chromium.launch_persistent_context.return_value = mock_context
+        mock_playwright.return_value.__aenter__.return_value = mock_pw
+
+        with patch("apply_operator.tools.browser.session_path", return_value=user_data_dir):
             async with get_page_with_session("https://example.com") as page:
                 assert page is mock_page
 
-        mock_browser.new_context.assert_awaited_once_with(storage_state=str(session_file))
+        mock_pw.chromium.launch_persistent_context.assert_awaited_once_with(
+            user_data_dir=str(user_data_dir),
+            headless=False,
+            channel="chrome",
+            args=["--disable-blink-features=AutomationControlled"],
+        )
 
-    @patch("apply_operator.tools.browser._get_browser_headed")
-    async def test_creates_context_without_session(
-        self, mock_browser_headed: MagicMock, tmp_path: Path
+    @patch("apply_operator.tools.browser.async_playwright")
+    async def test_creates_user_data_directory(
+        self, mock_playwright: MagicMock, tmp_path: Path
     ) -> None:
-        session_file = tmp_path / "new-site.com.json"  # Does not exist
-
-        mock_browser = AsyncMock()
+        user_data_dir = tmp_path / "deep" / "nested" / "example.com"
         mock_context = AsyncMock()
         mock_page = AsyncMock()
-        mock_browser.new_context.return_value = mock_context
-        mock_context.new_page.return_value = mock_page
-        mock_context.storage_state.return_value = {}
-        mock_browser_headed.return_value.__aenter__.return_value = mock_browser
+        mock_context.pages = [mock_page]
 
-        with patch("apply_operator.tools.browser.session_path", return_value=session_file):
-            async with get_page_with_session("https://new-site.com") as page:
+        mock_pw = AsyncMock()
+        mock_pw.chromium.launch_persistent_context.return_value = mock_context
+        mock_playwright.return_value.__aenter__.return_value = mock_pw
+
+        with patch("apply_operator.tools.browser.session_path", return_value=user_data_dir):
+            async with get_page_with_session("https://example.com"):
+                pass
+
+        assert user_data_dir.exists()
+
+    @patch("apply_operator.tools.browser.async_playwright")
+    async def test_creates_new_page_when_context_has_none(
+        self, mock_playwright: MagicMock, tmp_path: Path
+    ) -> None:
+        user_data_dir = tmp_path / "example.com"
+        mock_page = AsyncMock()
+        mock_context = AsyncMock()
+        mock_context.pages = []  # no existing pages
+        mock_context.new_page.return_value = mock_page
+
+        mock_pw = AsyncMock()
+        mock_pw.chromium.launch_persistent_context.return_value = mock_context
+        mock_playwright.return_value.__aenter__.return_value = mock_pw
+
+        with patch("apply_operator.tools.browser.session_path", return_value=user_data_dir):
+            async with get_page_with_session("https://example.com") as page:
                 assert page is mock_page
 
-        mock_browser.new_context.assert_awaited_once_with()
+        mock_context.new_page.assert_awaited_once()
 
-    @patch("apply_operator.tools.browser._get_browser_headed")
-    async def test_saves_session_on_exit(
-        self, mock_browser_headed: MagicMock, tmp_path: Path
+    @patch("apply_operator.tools.browser.async_playwright")
+    async def test_reuses_existing_page_from_context(
+        self, mock_playwright: MagicMock, tmp_path: Path
     ) -> None:
-        session_file = tmp_path / "sessions" / "example.com.json"
-        saved_state = {"cookies": [{"name": "token", "value": "xyz"}]}
+        user_data_dir = tmp_path / "example.com"
+        mock_existing_page = AsyncMock()
+        mock_context = AsyncMock()
+        mock_context.pages = [mock_existing_page]
 
-        mock_browser = AsyncMock()
+        mock_pw = AsyncMock()
+        mock_pw.chromium.launch_persistent_context.return_value = mock_context
+        mock_playwright.return_value.__aenter__.return_value = mock_pw
+
+        with patch("apply_operator.tools.browser.session_path", return_value=user_data_dir):
+            async with get_page_with_session("https://example.com") as page:
+                assert page is mock_existing_page
+
+        mock_context.new_page.assert_not_awaited()
+
+    @patch("apply_operator.tools.browser.async_playwright")
+    async def test_closes_context_on_exit(
+        self, mock_playwright: MagicMock, tmp_path: Path
+    ) -> None:
+        user_data_dir = tmp_path / "example.com"
         mock_context = AsyncMock()
         mock_page = AsyncMock()
-        mock_browser.new_context.return_value = mock_context
-        mock_context.new_page.return_value = mock_page
-        mock_context.storage_state.return_value = saved_state
-        mock_browser_headed.return_value.__aenter__.return_value = mock_browser
+        mock_context.pages = [mock_page]
 
-        with patch("apply_operator.tools.browser.session_path", return_value=session_file):
+        mock_pw = AsyncMock()
+        mock_pw.chromium.launch_persistent_context.return_value = mock_context
+        mock_playwright.return_value.__aenter__.return_value = mock_pw
+
+        with patch("apply_operator.tools.browser.session_path", return_value=user_data_dir):
             async with get_page_with_session("https://example.com"):
                 pass
 
-        assert session_file.exists()
-        written = json.loads(session_file.read_text())
-        assert written == saved_state
-
-    @patch("apply_operator.tools.browser._get_browser_headed")
-    async def test_creates_session_directory(
-        self, mock_browser_headed: MagicMock, tmp_path: Path
-    ) -> None:
-        session_file = tmp_path / "deep" / "nested" / "example.com.json"
-
-        mock_browser = AsyncMock()
-        mock_context = AsyncMock()
-        mock_page = AsyncMock()
-        mock_browser.new_context.return_value = mock_context
-        mock_context.new_page.return_value = mock_page
-        mock_context.storage_state.return_value = {}
-        mock_browser_headed.return_value.__aenter__.return_value = mock_browser
-
-        with patch("apply_operator.tools.browser.session_path", return_value=session_file):
-            async with get_page_with_session("https://example.com"):
-                pass
-
-        assert session_file.parent.exists()
-
-    @patch("apply_operator.tools.browser._get_browser_headed")
-    async def test_closes_page_and_context_on_exit(
-        self, mock_browser_headed: MagicMock, tmp_path: Path
-    ) -> None:
-        session_file = tmp_path / "example.com.json"
-
-        mock_browser = AsyncMock()
-        mock_context = AsyncMock()
-        mock_page = AsyncMock()
-        mock_browser.new_context.return_value = mock_context
-        mock_context.new_page.return_value = mock_page
-        mock_context.storage_state.return_value = {}
-        mock_browser_headed.return_value.__aenter__.return_value = mock_browser
-
-        with patch("apply_operator.tools.browser.session_path", return_value=session_file):
-            async with get_page_with_session("https://example.com"):
-                pass
-
-        mock_page.close.assert_awaited_once()
         mock_context.close.assert_awaited_once()
 
 
