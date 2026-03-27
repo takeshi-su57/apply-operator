@@ -88,6 +88,7 @@ async def find_next_page(page: Page) -> bool:
 ### New prompt needed
 
 Add `EXTRACT_JOBS` to `prompts/job_matching.py`:
+
 - Input: page text + source URL
 - Output: JSON array of `{title, company, description, location, apply_url}`
 
@@ -128,22 +129,25 @@ async def search_jobs(state: ApplicationState) -> dict[str, Any]:
 
 ## Acceptance Criteria
 
-- [ ] Node visits each URL and returns `JobListing` objects
-- [ ] Login walls detected — user prompted to log in manually
-- [ ] Sessions saved after login — reused on next run
-- [ ] Pagination followed until no more pages
-- [ ] Works with at least 2 different job site layouts
-- [ ] One failing URL doesn't crash the pipeline — error is recorded, others continue
-- [ ] Empty page text produces empty job list (no crash)
-- [ ] Tests pass with mocked Playwright page and LLM response
-- [ ] `ruff check` and `mypy` pass
+- [x] Node visits each URL and returns `JobListing` objects
+- [x] Login walls detected — user prompted to log in manually
+- [x] Sessions saved after login — reused on next run
+- [x] Pagination followed until no more pages
+- [ ] Works with at least 2 different job site layouts (tested with jobright.ai; needs more sites)
+- [x] One failing URL doesn't crash the pipeline — error is recorded, others continue
+- [x] Empty page text produces empty job list (no crash)
+- [x] Tests pass with mocked Playwright page and LLM response (18 tests)
+- [x] `ruff check` and `mypy` pass
 
 ## Files Touched
 
-- `src/apply_operator/nodes/search_jobs.py` — implement
-- `src/apply_operator/prompts/job_matching.py` — add `EXTRACT_JOBS` prompt
-- `src/apply_operator/tools/browser.py` — add `detect_login_required()` if not in 005
-- `tests/test_search_jobs.py` — create
+- `src/apply_operator/nodes/search_jobs.py` — implemented (async node with login detection, LLM extraction, pagination)
+- `src/apply_operator/prompts/job_matching.py` — added `EXTRACT_JOBS` prompt
+- `src/apply_operator/tools/browser.py` — switched to `launch_persistent_context` with real Chrome to avoid bot detection
+- `src/apply_operator/main.py` — wired graph invocation via `asyncio.run(graph.ainvoke())`
+- `src/apply_operator/nodes/analyze_fit.py` — stub updated to advance `current_job_index` (prevents infinite loop)
+- `src/apply_operator/nodes/fill_application.py` — stub updated to advance `current_job_index`
+- `tests/test_search_jobs.py` — created (18 tests)
 
 ## Related Issues
 
