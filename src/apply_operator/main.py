@@ -56,9 +56,25 @@ def run(
     from apply_operator.state import ApplicationState
 
     graph = build_graph()
-    state = ApplicationState(resume_path=str(resume), job_urls=job_urls)
-    result = asyncio.run(graph.ainvoke(state))
+    initial = ApplicationState(resume_path=str(resume), job_urls=job_urls)
+    result = asyncio.run(_run_graph(graph, initial))
     _print_results(result)
+
+
+async def _run_graph(
+    graph: Any,
+    initial: Any,
+) -> dict[str, Any]:
+    """Stream graph execution, printing each node as it completes."""
+    final_state: dict[str, Any] = {}
+    async for event in graph.astream(initial, stream_mode="updates"):
+        for node_name in event:
+            console.print(f"  [green]\u2713[/green] {node_name}")
+        for node_output in event.values():
+            if node_output:
+                final_state.update(node_output)
+    console.print()
+    return final_state
 
 
 @app.command()
