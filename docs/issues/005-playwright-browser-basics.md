@@ -75,17 +75,17 @@ During login/CAPTCHA flows, the browser **must** be visible (`headless=False`) s
 
 ## Acceptance Criteria
 
-- [ ] `get_page()` opens and closes a browser cleanly
-- [ ] `get_page_with_session(url)` loads saved session if available
-- [ ] Sessions saved to `data/sessions/<domain>.json` after page use
-- [ ] Expired sessions detected (login wall still present after loading session)
-- [ ] `wait_for_user(page, message)` pauses automation and shows browser
-- [ ] `get_page_text(page)` returns visible text content
-- [ ] `get_page_links(page)` returns list of `{href, text}` dicts
-- [ ] `take_screenshot(page, name)` saves to `data/screenshots/`
-- [ ] Both headless and headed mode work (`BROWSER_HEADLESS=true/false`)
-- [ ] Tests pass with mocked Playwright
-- [ ] `ruff check` and `mypy` pass
+- [x] `get_page()` opens and closes a browser cleanly
+- [x] `get_page_with_session(url)` loads saved session if available
+- [x] Sessions saved to `data/sessions/<domain>.json` after page use
+- [x] Expired sessions detected (login wall still present after loading session)
+- [x] `wait_for_user(page, message)` pauses automation and shows browser
+- [x] `get_page_text(page)` returns visible text content
+- [x] `get_page_links(page)` returns list of `{href, text}` dicts
+- [x] `take_screenshot(page, name)` saves to `data/screenshots/`
+- [x] Both headless and headed mode work (`BROWSER_HEADLESS=true/false`)
+- [x] Tests pass with mocked Playwright
+- [x] `ruff check` and `mypy` pass
 
 ## Files Touched
 

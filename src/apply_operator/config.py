@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # Browser
     browser_headless: bool = True
+    browser_timeout: int = 30000
 
     # Logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
