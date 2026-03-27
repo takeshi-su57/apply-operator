@@ -1,5 +1,6 @@
 """CLI entry point for the job application agent."""
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any
@@ -51,16 +52,13 @@ def run(
     console.print(f"  Job URLs: {len(job_urls)} sites")
     console.print()
 
-    # TODO: Build graph, create initial state, invoke
-    # from apply_operator.graph import build_graph
-    # from apply_operator.state import ApplicationState
-    #
-    # graph = build_graph()
-    # state = ApplicationState(resume_path=str(resume), job_urls=job_urls)
-    # result = graph.invoke(state)
-    # _print_results(result)
+    from apply_operator.graph import build_graph
+    from apply_operator.state import ApplicationState
 
-    console.print("[yellow]Agent pipeline not yet implemented. Stubs are in place.[/yellow]")
+    graph = build_graph()
+    state = ApplicationState(resume_path=str(resume), job_urls=job_urls)
+    result = asyncio.run(graph.ainvoke(state))
+    _print_results(result)
 
 
 @app.command()

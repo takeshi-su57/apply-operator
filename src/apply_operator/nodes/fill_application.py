@@ -12,14 +12,7 @@ def fill_application(state: ApplicationState) -> dict[str, Any]:
     uses LLM to determine appropriate values from resume data,
     fills the form, and submits.
     """
-    # TODO: Implement
-    # 1. Get current job: state.jobs[state.current_job_index]
-    # 2. Navigate to job application URL with browser tool
-    # 3. Identify form fields on the page
-    # 4. Use LLM to map resume data to form fields
-    # 5. Fill form fields with Playwright
-    # 6. Submit application
-    # 7. Update job.applied = True, increment total_applied
-    # 8. Advance current_job_index
-    # 9. Return updated state fields
-    return {}
+    # TODO: Implement form filling via Playwright + LLM
+    # For now, skip by advancing the index
+    idx = state.current_job_index
+    return {"current_job_index": idx + 1}

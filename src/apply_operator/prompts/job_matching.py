@@ -24,3 +24,23 @@ Return a JSON object with:
 - reasoning: brief explanation (1-2 sentences)
 
 Return ONLY valid JSON, no other text."""
+
+EXTRACT_JOBS = """Extract job listings from the following web page text.
+
+## Page Text
+{page_text}
+
+## Source URL
+{url}
+
+## Instructions
+Identify every distinct job listing visible on the page. For each job, extract:
+- title: job title
+- company: company name (if visible)
+- description: brief description or summary (first 200 characters)
+- location: job location (if visible)
+- apply_url: direct link to apply or view the job (if visible, otherwise use the source URL)
+
+Return a JSON array of objects. If no job listings are found, return an empty array [].
+
+Return ONLY valid JSON, no other text."""

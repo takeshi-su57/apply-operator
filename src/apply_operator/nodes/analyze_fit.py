@@ -10,11 +10,15 @@ def analyze_fit(state: ApplicationState) -> dict[str, Any]:
 
     Returns a fit score (0.0 to 1.0) for the current job listing.
     """
-    # TODO: Implement
-    # 1. Get current job: state.jobs[state.current_job_index]
-    # 2. Build prompt with resume data + job description
-    # 3. Call LLM for fit analysis
-    # 4. Parse score from response
-    # 5. Update job's fit_score
-    # 6. Return updated state fields
-    return {}
+    # TODO: Implement LLM-based fit scoring
+    # For now, skip all jobs by advancing the index
+    idx = state.current_job_index
+    if idx >= len(state.jobs):
+        return {}
+    jobs = list(state.jobs)
+    jobs[idx] = jobs[idx].model_copy(update={"fit_score": 0.0})
+    return {
+        "jobs": jobs,
+        "current_job_index": idx + 1,
+        "total_skipped": state.total_skipped + 1,
+    }

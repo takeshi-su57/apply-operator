@@ -1,7 +1,6 @@
 """Playwright browser automation for job applications."""
 
 import asyncio
-import json
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -19,6 +18,10 @@ logger = logging.getLogger(__name__)
 SESSIONS_DIR = Path("data/sessions")
 SCREENSHOTS_DIR = Path("data/screenshots")
 
+_STEALTH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+]
+
 
 class LinkInfo(TypedDict):
     """Typed dict for page link information."""
@@ -34,10 +37,10 @@ def session_path(url: str) -> Path:
         url: Full URL to extract domain from.
 
     Returns:
-        Path to the session JSON file for the domain.
+        Path to the session directory for the domain.
     """
     domain = urlparse(url).netloc
-    return SESSIONS_DIR / f"{domain}.json"
+    return SESSIONS_DIR / domain
 
 
 @asynccontextmanager
@@ -45,7 +48,11 @@ async def get_browser() -> AsyncGenerator[Browser, None]:
     """Create and yield a Playwright browser instance."""
     settings = get_settings()
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=settings.browser_headless)
+        browser = await p.chromium.launch(
+            headless=settings.browser_headless,
+            channel="chrome",
+            args=_STEALTH_ARGS,
+        )
         try:
             yield browser
         finally:
@@ -64,54 +71,32 @@ async def get_page() -> AsyncGenerator[Page, None]:
 
 
 @asynccontextmanager
-async def _get_browser_headed() -> AsyncGenerator[Browser, None]:
-    """Create a headed (visible) browser instance for user intervention."""
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
-        try:
-            yield browser
-        finally:
-            await browser.close()
-
-
-@asynccontextmanager
 async def get_page_with_session(url: str) -> AsyncGenerator[Page, None]:
-    """Create a page with saved session cookies if available.
+    """Create a page with a persistent browser profile for the domain.
 
+    Uses launch_persistent_context with a per-domain user data directory,
+    making the browser indistinguishable from a normal Chrome session.
     Always launches in headed mode so the user can intervene for login/CAPTCHA.
-    Saves the session (cookies + localStorage) on exit.
 
     Args:
-        url: URL to load session for (session is keyed by domain).
+        url: URL to load session for (session directory is keyed by domain).
     """
-    path = session_path(url)
-    context: BrowserContext | None = None
-    page: Page | None = None
+    user_data_dir = session_path(url)
+    user_data_dir.mkdir(parents=True, exist_ok=True)
 
-    async with _get_browser_headed() as browser:
+    async with async_playwright() as p:
+        context = await p.chromium.launch_persistent_context(
+            user_data_dir=str(user_data_dir),
+            headless=False,
+            channel="chrome",
+            args=_STEALTH_ARGS,
+        )
         try:
-            if path.exists():
-                logger.info("Loading saved session from %s", path)
-                context = await browser.new_context(storage_state=str(path))
-            else:
-                context = await browser.new_context()
-
-            page = await context.new_page()
+            page = context.pages[0] if context.pages else await context.new_page()
             yield page
         finally:
-            # Save session before cleanup
-            if context is not None:
-                try:
-                    state = await context.storage_state()
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text(json.dumps(state), encoding="utf-8")
-                    logger.info("Session saved to %s", path)
-                except Exception:
-                    logger.warning("Failed to save session to %s", path, exc_info=True)
-            if page is not None:
-                await page.close()
-            if context is not None:
-                await context.close()
+            await context.close()
+            logger.info("Session saved to %s", user_data_dir)
 
 
 async def wait_for_user(page: Page, message: str) -> None:
