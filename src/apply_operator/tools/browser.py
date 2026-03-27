@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TypedDict
 from urllib.parse import urlparse
 
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright
+from playwright.async_api import Browser, Page, async_playwright
 from rich.console import Console
 
 from apply_operator.config import get_settings
@@ -97,6 +97,54 @@ async def get_page_with_session(url: str) -> AsyncGenerator[Page, None]:
         finally:
             await context.close()
             logger.info("Session saved to %s", user_data_dir)
+
+
+async def wait_for_page_ready(
+    page: Page,
+    *,
+    settle_ms: int = 500,
+    timeout_ms: int = 10000,
+) -> None:
+    """Wait for a page to finish rendering dynamic content.
+
+    Strategy:
+    1. Wait for network idle (no in-flight requests for 500ms).
+    2. Poll page text length until it stabilizes — catches skeleton screens,
+       lazy-loaded lists, and JS-rendered content that appears after network idle.
+
+    Args:
+        page: Playwright page to wait on.
+        settle_ms: How long (ms) the text length must stay unchanged to consider
+            the page stable. Default 500ms.
+        timeout_ms: Maximum total wait time. Default 10s.
+    """
+    # Step 1: wait for network to quiet down
+    try:
+        await page.wait_for_load_state("networkidle", timeout=timeout_ms)
+    except Exception:
+        logger.debug("networkidle timed out, proceeding to content stability check")
+
+    # Step 2: poll text length until stable
+    prev_length = 0
+    stable_since = 0.0
+    elapsed = 0.0
+    poll_interval = 0.25  # seconds
+
+    while elapsed < timeout_ms / 1000:
+        text = await page.evaluate("() => (document.body.innerText || '').length")
+        now = asyncio.get_event_loop().time()
+
+        if text != prev_length:
+            prev_length = text
+            stable_since = now
+        elif (now - stable_since) >= settle_ms / 1000:
+            logger.debug("Page content stable at %d chars after %.1fs", text, elapsed)
+            return
+
+        await asyncio.sleep(poll_interval)
+        elapsed += poll_interval
+
+    logger.debug("Page ready timeout after %.1fs, proceeding with %d chars", elapsed, prev_length)
 
 
 async def wait_for_user(page: Page, message: str) -> None:

@@ -64,22 +64,30 @@ def get_llm() -> BaseChatModel:
     raise ValueError(msg)
 
 
-def call_llm(prompt: str) -> str:
+def call_llm(prompt: str, *, purpose: str = "") -> str:
     """Call the configured LLM with a prompt and return the response text.
 
     Convenience wrapper around get_llm() that handles AIMessage extraction.
+
+    Args:
+        prompt: The prompt to send to the LLM.
+        purpose: Short description of why this call is being made (for logging).
     """
     settings = get_settings()
     llm = get_llm()
 
+    purpose_str = f" purpose={purpose}" if purpose else ""
     logger.info(
-        "LLM call starting | provider=%s model=%s",
+        "LLM call | provider=%s model=%s%s",
         settings.llm_provider,
         settings.llm_model,
+        purpose_str,
     )
+    logger.debug("LLM prompt | %d chars", len(prompt))
     start = time.perf_counter()
     response = llm.invoke(prompt)
     elapsed = time.perf_counter() - start
-    logger.info("LLM call finished | %.2fs", elapsed)
+    content = str(response.content)
+    logger.info("LLM call | completed | %.2fs | ~%d chars", elapsed, len(content))
 
-    return str(response.content)
+    return content

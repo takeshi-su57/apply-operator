@@ -97,6 +97,7 @@ playwright install         # Install browser binaries
 - `.claude/rules/gh-issue.md` — Issue title format, templates for bugs/features/chores
 - `.claude/rules/ai-framework.md` — Sync protocol, skill/rule design, maintenance
 - `.claude/rules/documentation.md` — Docs structure, ADR conventions
+- `.claude/rules/logging.md` — Log levels, node decorator, LLM call logging, format conventions
 
 ## Known Gaps
 
