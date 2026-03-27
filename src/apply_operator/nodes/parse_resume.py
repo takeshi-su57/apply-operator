@@ -27,11 +27,11 @@ def parse_resume(state: ApplicationState) -> dict[str, Any]:
     """
     raw_text = extract_text(state.resume_path)
     prompt = PARSE_RESUME.format(resume_text=raw_text)
-    
+
     try:
         response = call_llm(prompt)
         cleaned = _strip_markdown_json(response)
-    
+
         data = json.loads(cleaned)
         resume = ResumeData(raw_text=raw_text, **data)
     except (json.JSONDecodeError, ValidationError) as e:
