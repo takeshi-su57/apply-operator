@@ -348,7 +348,7 @@ class TestPrintResults:
 
         test_console = Console(file=StringIO(), width=120)
         with patch("apply_operator.main.console", test_console):
-            _print_results(state)
+            _print_results(state, total_duration=5.0, step_times={}, verbose=False)
 
         output = test_console.file.getvalue()  # type: ignore[union-attr]
         assert "Python Dev" in output
