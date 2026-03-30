@@ -14,129 +14,79 @@ Implement the real `fill_application` node that uses Playwright to navigate to a
 - Bot detection during form submission is common — the agent must pause for user to solve CAPTCHAs
 - **This is the second milestone** — after this, the agent can actually apply to jobs
 
-## Proposed Solution
+## Implementation
 
-### LLM-guided form filling approach
+### Browser utilities added to `tools/browser.py`
 
-1. Navigate to application page
-2. Detect CAPTCHA or verification — if found, pause for user
-3. Extract form field metadata via JavaScript (`get_form_fields()`)
-4. Send fields + resume data to LLM with `MAP_FORM_FIELDS` prompt
-5. Parse LLM response (field_name → value mapping)
-6. Fill each field with Playwright (text, dropdown, file upload, checkbox)
-7. Before submit — detect CAPTCHA again, pause if needed
-8. Submit and verify
+**`FormField` TypedDict** — structured metadata for each form field:
+- `tag`, `field_type`, `name`, `label`, `required`, `selector`, `options`
 
-### CAPTCHA / bot detection
+**`get_form_fields(page) -> list[FormField]`** — JavaScript evaluation that:
+- Finds all `input`, `select`, `textarea` elements
+- Skips `hidden`, `submit`, `button` types and elements without name/id
+- Resolves labels via `label[for]`, parent `<label>`, `aria-label`, `placeholder`, `name`
+- Builds CSS selector per field (`#id` or `[name="..."]`) using `CSS.escape()`
+- Collects option value/text pairs for `<select>` elements
 
-```python
-async def detect_captcha(page: Page) -> bool:
-    """Check if a CAPTCHA or bot verification is present."""
-    captcha_selectors = [
-        'iframe[src*="recaptcha"]', 'iframe[src*="hcaptcha"]',
-        '[class*="captcha"]', '#captcha', '[data-captcha]',
-        'iframe[src*="challenge"]',
-    ]
-    for selector in captcha_selectors:
-        element = await page.query_selector(selector)
-        if element and await element.is_visible():
-            return True
-    return False
+**`detect_captcha(page) -> bool`** — checks for CAPTCHA via:
+- DOM selectors: `iframe[src*="recaptcha"]`, `iframe[src*="hcaptcha"]`, `.g-recaptcha`, `#captcha`, `[class*='captcha']`, `[data-captcha]`, `iframe[src*="challenge"]`
+- Text indicators: "verify you are human", "are you a robot", "complete the captcha", "security check", "prove you're not a robot"
 
-async def handle_captcha_if_present(page: Page) -> None:
-    """If CAPTCHA detected, pause for user to solve it."""
-    if await detect_captcha(page):
-        await wait_for_user(page, "CAPTCHA detected. Please solve it in the browser.")
-```
+**`handle_captcha_if_present(page)`** — if CAPTCHA detected, calls `wait_for_user()` then `wait_for_page_ready()`
 
-### Form field extraction (JavaScript in browser)
+### Prompts in `prompts/form_filling.py`
 
-```python
-async def get_form_fields(page: Page) -> list[dict]:
-    return await page.evaluate("""() => {
-        const fields = [];
-        document.querySelectorAll('input, select, textarea').forEach(el => {
-            const label = document.querySelector(`label[for="${el.id}"]`)?.textContent
-                || el.getAttribute('aria-label') || el.placeholder || el.name || '';
-            fields.push({
-                tag: el.tagName.toLowerCase(), type: el.type || 'text',
-                name: el.name || el.id || '', label: label.trim(),
-                required: el.required, selector: el.id ? '#' + el.id : `[name="${el.name}"]`,
-                options: el.tagName === 'SELECT'
-                    ? [...el.options].map(o => ({value: o.value, text: o.textContent})) : [],
-            });
-        });
-        return fields;
-    }""")
-```
+**`MAP_FORM_FIELDS`** — enhanced with:
+- `{job_title}`, `{company}`, `{summary}` placeholders for context-aware filling
+- Field type instructions: checkboxes → `"true"/"false"`, file → `"RESUME_FILE"` sentinel, select → exact option text
+- Uses field `name` as JSON key
+- Cover letter instruction: compose brief answer using candidate summary + job context
 
-### Multi-page form handling
+**`DETECT_FORM_PAGE_TYPE`** (new) — classifies page as `"form"`, `"confirmation"`, `"error"`, or `"other"` for post-submit verification
 
-Some applications have Next → Next → Submit flows. Loop: extract fields → fill → click next → check for CAPTCHA → repeat until submit.
+### Node implementation in `nodes/fill_application.py`
 
-### File upload (resume PDF)
+Converted from sync stub to full async node following `search_jobs` pattern:
 
-```python
-file_input = await page.query_selector('input[type="file"]')
-if file_input:
-    await file_input.set_input_files(state.resume_path)
-```
+**Helper functions:**
+- `_strip_markdown_json()` — strips markdown code fences from LLM responses
+- `_format_experience()` / `_format_education()` — format resume data for prompt
+- `_format_fields_for_prompt()` — format `FormField` list as readable text for LLM
+- `_map_fields_with_llm(fields, resume, job)` — LLM-powered field-to-value mapping
+- `_fill_field(page, field, value, resume_path)` — dispatches by field type:
+  - text/email/tel/url/textarea → `page.fill()`
+  - select → `page.select_option(label=value)`
+  - checkbox/radio → `page.check()` / `page.uncheck()`
+  - file → `page.set_input_files(resume_path)` when value is `"RESUME_FILE"`
+- `_find_and_click(page, selectors)` — tries selectors in order, clicks first visible match
+- `_verify_submission(page)` — text heuristic first, then LLM classification
 
-### Full node flow
+**Main node flow:**
+1. Open browser with `get_page_with_session(job.url)` (persistent session per domain)
+2. Navigate to application URL, wait for page ready
+3. Pre-form CAPTCHA check
+4. Multi-page form loop (max 10 pages):
+   - Extract form fields via `get_form_fields()`
+   - LLM maps resume data to field values
+   - Fill each field via `_fill_field()`
+   - Pre-submit CAPTCHA check
+   - Try "Next"/"Continue" button → continue loop
+   - Try "Submit"/"Apply" button → break
+   - Neither found → break (dead end)
+5. Verify submission via `_verify_submission()`
+6. Take evidence screenshot to `data/screenshots/`
+7. Update job state accordingly
+8. Error handling: outer try/except catches all, records in `job.error` and `state.errors`
 
-```python
-async def fill_application(state: ApplicationState) -> dict[str, Any]:
-    job = state.jobs[state.current_job_index]
-    errors = list(state.errors)
+### Test suite: `tests/test_fill_application.py`
 
-    try:
-        async with get_page_with_session(job.url) as page:
-            await page.goto(job.url, timeout=30000)
-
-            # Handle CAPTCHA before filling
-            await handle_captcha_if_present(page)
-
-            # Multi-page form loop
-            while True:
-                fields = await get_form_fields(page)
-                if not fields:
-                    break
-
-                # LLM maps resume data to form fields
-                mapping = get_field_mapping(fields, state.resume)
-                await fill_fields(page, mapping)
-
-                # Check for next button vs submit
-                next_btn = await page.query_selector('button:text("Next")')
-                if next_btn:
-                    await next_btn.click()
-                    await page.wait_for_load_state("networkidle")
-                    await handle_captcha_if_present(page)
-                    continue
-
-                # Handle CAPTCHA before submit
-                await handle_captcha_if_present(page)
-
-                submit_btn = await page.query_selector('button[type="submit"]')
-                if submit_btn:
-                    await submit_btn.click()
-                    break
-
-            job.applied = True
-            return {
-                "jobs": update_job(state.jobs, state.current_job_index, job),
-                "current_job_index": state.current_job_index + 1,
-                "total_applied": state.total_applied + 1,
-            }
-    except Exception as e:
-        job.error = str(e)
-        errors.append(f"Failed to apply to {job.title}: {e}")
-        return {
-            "jobs": update_job(state.jobs, state.current_job_index, job),
-            "current_job_index": state.current_job_index + 1,
-            "errors": errors,
-        }
-```
+26 tests across 7 test classes:
+- `TestStripMarkdownJson` — code fence stripping
+- `TestMapFieldsWithLlm` — JSON parsing, markdown handling, invalid responses
+- `TestFillField` — text, dropdown, checkbox, file upload, error handling
+- `TestFindAndClick` — visible match, no match, hidden elements
+- `TestVerifySubmission` — heuristic detection, LLM detection, edge cases
+- `TestFillApplication` — single page, multi-page, CAPTCHA, no fields, exceptions, file upload
 
 ## Alternatives Considered
 
@@ -146,22 +96,23 @@ async def fill_application(state: ApplicationState) -> dict[str, Any]:
 
 ## Acceptance Criteria
 
-- [ ] Node navigates to application page, fills form fields, and submits
-- [ ] CAPTCHA/bot detection pauses automation and prompts user
-- [ ] User intervention resumes correctly after CAPTCHA is solved
-- [ ] Works with at least one real job application form
-- [ ] Text inputs, dropdowns, and file uploads handled
-- [ ] Multi-page forms detected and handled
-- [ ] Errors don't crash the pipeline — recorded in `job.error` and `state.errors`
-- [ ] Tests pass with mocked Playwright page and LLM
-- [ ] `ruff check` and `mypy` pass
+- [x] Node navigates to application page, fills form fields, and submits
+- [x] CAPTCHA/bot detection pauses automation and prompts user
+- [x] User intervention resumes correctly after CAPTCHA is solved
+- [ ] Works with at least one real job application form (requires manual E2E test)
+- [x] Text inputs, dropdowns, and file uploads handled
+- [x] Multi-page forms detected and handled
+- [x] Errors don't crash the pipeline — recorded in `job.error` and `state.errors`
+- [x] Tests pass with mocked Playwright page and LLM (26 tests)
+- [x] `ruff check` and `mypy` pass
 
 ## Files Touched
 
-- `src/apply_operator/nodes/fill_application.py` — full implementation
-- `src/apply_operator/tools/browser.py` — add `get_form_fields()`, `detect_captcha()`, `handle_captcha_if_present()`
-- `src/apply_operator/prompts/form_filling.py` — refine `MAP_FORM_FIELDS`
-- `tests/test_fill_application.py` — create
+- `src/apply_operator/nodes/fill_application.py` — full async implementation (363 lines)
+- `src/apply_operator/tools/browser.py` — added `FormField`, `get_form_fields()`, `detect_captcha()`, `handle_captcha_if_present()` (366 lines total)
+- `src/apply_operator/prompts/form_filling.py` — enhanced `MAP_FORM_FIELDS`, added `DETECT_FORM_PAGE_TYPE`
+- `tests/test_fill_application.py` — 26 tests across 7 classes (692 lines)
+- `tests/test_graph.py` — updated mock to use sync `_fake_fill` for graph compatibility
 
 ## Related Issues
 
