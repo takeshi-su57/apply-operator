@@ -30,6 +30,18 @@ class LinkInfo(TypedDict):
     text: str
 
 
+class FormField(TypedDict):
+    """Typed dict for form field metadata extracted from a page."""
+
+    tag: str  # "input", "select", "textarea"
+    field_type: str  # "text", "email", "tel", "select", "textarea", "file", "checkbox", "radio"
+    name: str  # name or id attribute
+    label: str  # resolved label text
+    required: bool
+    selector: str  # CSS selector to target this field
+    options: list[dict[str, str]]  # for select: [{value, text}]
+
+
 def session_path(url: str) -> Path:
     """Get session file path for a URL's domain.
 
@@ -217,3 +229,137 @@ async def take_screenshot(page: Page, name: str) -> Path:
     await page.screenshot(path=str(path))
     logger.info("Screenshot saved: %s", path)
     return path
+
+
+_CAPTCHA_SELECTORS = [
+    'iframe[src*="recaptcha"]',
+    'iframe[src*="hcaptcha"]',
+    ".g-recaptcha",
+    "#captcha",
+    "[class*='captcha']",
+    "[data-captcha]",
+    'iframe[src*="challenge"]',
+]
+
+_CAPTCHA_TEXT_INDICATORS = [
+    "verify you are human",
+    "are you a robot",
+    "complete the captcha",
+    "security check",
+    "prove you're not a robot",
+]
+
+
+async def detect_captcha(page: Page) -> bool:
+    """Check if a CAPTCHA or bot verification is present on the page.
+
+    Args:
+        page: Playwright page to check.
+
+    Returns:
+        True if CAPTCHA or bot verification is detected.
+    """
+    for selector in _CAPTCHA_SELECTORS:
+        try:
+            element = await page.query_selector(selector)
+            if element and await element.is_visible():
+                logger.info("CAPTCHA detected via selector: %s", selector)
+                return True
+        except Exception:
+            continue
+
+    try:
+        text = await get_page_text(page)
+        text_lower = text.lower()[:2000]
+        for indicator in _CAPTCHA_TEXT_INDICATORS:
+            if indicator in text_lower:
+                logger.info("CAPTCHA detected via text indicator: %s", indicator)
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
+async def handle_captcha_if_present(page: Page) -> None:
+    """If CAPTCHA is detected, pause for the user to solve it.
+
+    Args:
+        page: Playwright page to check and wait on.
+    """
+    if await detect_captcha(page):
+        await wait_for_user(page, "CAPTCHA detected. Please solve it in the browser.")
+        await wait_for_page_ready(page)
+
+
+async def get_form_fields(page: Page) -> list[FormField]:
+    """Extract form field metadata from the page via JavaScript.
+
+    Finds all input, select, and textarea elements, resolves their labels,
+    and returns structured metadata for LLM-guided form filling.
+
+    Args:
+        page: Playwright page to extract fields from.
+
+    Returns:
+        List of FormField dicts describing each fillable field.
+    """
+    try:
+        fields: list[FormField] = await page.evaluate(
+            """() => {
+            const fields = [];
+            const elements = document.querySelectorAll('input, select, textarea');
+            for (const el of elements) {
+                const type = (el.type || 'text').toLowerCase();
+                if (type === 'hidden' || type === 'submit' || type === 'button') continue;
+
+                const id = el.id || '';
+                const name = el.name || id || '';
+                if (!name && !id) continue;
+
+                // Resolve label
+                let label = '';
+                if (id) {
+                    const labelEl = document.querySelector(`label[for="${id}"]`);
+                    if (labelEl) label = labelEl.textContent.trim();
+                }
+                if (!label) {
+                    const parentLabel = el.closest('label');
+                    if (parentLabel) label = parentLabel.textContent.trim();
+                }
+                if (!label) label = el.getAttribute('aria-label') || '';
+                if (!label) label = el.placeholder || '';
+                if (!label) label = name;
+
+                // Build selector
+                const selector = id ? '#' + CSS.escape(id) : `[name="${CSS.escape(name)}"]`;
+
+                // Collect options for select elements
+                const options = [];
+                if (el.tagName === 'SELECT') {
+                    for (const opt of el.options) {
+                        if (opt.value) {
+                            options.push({value: opt.value, text: opt.textContent.trim()});
+                        }
+                    }
+                }
+
+                fields.push({
+                    tag: el.tagName.toLowerCase(),
+                    field_type: el.tagName === 'SELECT' ? 'select'
+                        : el.tagName === 'TEXTAREA' ? 'textarea' : type,
+                    name: name,
+                    label: label,
+                    required: el.required || false,
+                    selector: selector,
+                    options: options,
+                });
+            }
+            return fields;
+        }"""
+        )
+        logger.debug("Extracted %d form fields", len(fields))
+        return fields
+    except Exception:
+        logger.warning("Failed to extract form fields", exc_info=True)
+        return []

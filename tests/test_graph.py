@@ -99,6 +99,18 @@ def _fake_analyze(scores: list[float]):  # type: ignore[no-untyped-def]
     return _analyze
 
 
+def _fake_fill(state: ApplicationState) -> dict[str, Any]:
+    """Mock fill_application: mark job as applied and advance index."""
+    idx = state.current_job_index
+    jobs = list(state.jobs)
+    jobs[idx] = jobs[idx].model_copy(update={"applied": True})
+    return {
+        "jobs": jobs,
+        "current_job_index": idx + 1,
+        "total_applied": state.total_applied + 1,
+    }
+
+
 def _noop_report(state: ApplicationState) -> dict[str, Any]:
     """Mock report_results: no-op."""
     return {}
@@ -118,6 +130,7 @@ class TestFullPipeline:
             patch("apply_operator.graph.parse_resume", _fake_parse),
             patch("apply_operator.graph.search_jobs", _fake_search(jobs)),
             patch("apply_operator.graph.analyze_fit", _fake_analyze(scores)),
+            patch("apply_operator.graph.fill_application", _fake_fill),
         ]
         if mock_report:
             patches.append(patch("apply_operator.graph.report_results", _noop_report))
