@@ -1,9 +1,13 @@
 """Shared test fixtures for apply-operator."""
 
+import sqlite3
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import fitz  # PyMuPDF
 import pytest
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from apply_operator.state import ApplicationState, JobListing, ResumeData
 
@@ -90,3 +94,21 @@ def sample_state(sample_resume: ResumeData, sample_jobs: list[JobListing]) -> Ap
         jobs=sample_jobs,
         current_job_index=0,
     )
+
+
+@pytest.fixture
+def checkpoint_saver() -> Iterator[SqliteSaver]:
+    """In-memory sync SqliteSaver for read-only checkpoint operations."""
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    saver = SqliteSaver(conn)
+    saver.setup()
+    yield saver
+    conn.close()
+
+
+@pytest.fixture
+async def async_checkpoint_saver() -> AsyncIterator[AsyncSqliteSaver]:
+    """In-memory AsyncSqliteSaver for async graph execution tests."""
+    async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+        await saver.setup()
+        yield saver

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     llm_max_retries: int = 3
     retry_base_delay: float = 1.0  # seconds
 
+    # Checkpoint
+    checkpoint_db: str = "data/checkpoints.sqlite"
+
     # Logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
