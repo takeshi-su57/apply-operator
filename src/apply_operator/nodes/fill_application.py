@@ -259,10 +259,10 @@ async def fill_application(state: ApplicationState) -> dict[str, Any]:
     uses LLM to determine appropriate values from resume data,
     fills the form, handles CAPTCHAs, and submits.
     """
-    idx = state.current_job_index
-    jobs = list(state.jobs)
+    idx = state["current_job_index"]
+    jobs = list(state["jobs"])
     job = jobs[idx]
-    errors = list(state.errors)
+    errors: list[str] = []
 
     try:
         async with get_page_with_session(job.url) as page:
@@ -284,7 +284,7 @@ async def fill_application(state: ApplicationState) -> dict[str, Any]:
                 logger.info("Page %d: found %d form fields", page_num + 1, len(fields))
 
                 # LLM maps resume data to form fields
-                mapping = _map_fields_with_llm(fields, state.resume, job)
+                mapping = _map_fields_with_llm(fields, state["resume"], job)
                 if not mapping:
                     logger.warning("LLM returned empty field mapping on page %d", page_num + 1)
 
@@ -294,7 +294,7 @@ async def fill_application(state: ApplicationState) -> dict[str, Any]:
                     value = mapping.get(field["name"], "")
                     if not value:
                         continue
-                    await _fill_field(page, field, value, state.resume_path)
+                    await _fill_field(page, field, value, state["resume_path"])
                     filled_count += 1
 
                 logger.info(
@@ -340,7 +340,7 @@ async def fill_application(state: ApplicationState) -> dict[str, Any]:
             return {
                 "jobs": jobs,
                 "current_job_index": idx + 1,
-                "total_applied": state.total_applied + 1,
+                "total_applied": state["total_applied"] + 1,
             }
         else:
             msg = f"Submission not confirmed for {job.title} at {job.company}"
@@ -350,7 +350,7 @@ async def fill_application(state: ApplicationState) -> dict[str, Any]:
             return {
                 "jobs": jobs,
                 "current_job_index": idx + 1,
-                "total_skipped": state.total_skipped + 1,
+                "total_skipped": state["total_skipped"] + 1,
                 "errors": errors,
             }
 
@@ -364,7 +364,7 @@ async def fill_application(state: ApplicationState) -> dict[str, Any]:
         return {
             "jobs": jobs,
             "current_job_index": idx + 1,
-            "total_skipped": state.total_skipped + 1,
+            "total_skipped": state["total_skipped"] + 1,
             "errors": errors,
         }
     except Exception as e:

@@ -20,11 +20,11 @@ def should_apply(state: ApplicationState) -> str:
     analyze_fit scores the job at current_job_index without advancing.
     This function checks that scored job and routes accordingly.
     """
-    idx = state.current_job_index
-    if idx >= len(state.jobs):
+    idx = state["current_job_index"]
+    if idx >= len(state["jobs"]):
         return "report"
 
-    current_job = state.jobs[idx]
+    current_job = state["jobs"][idx]
     if current_job.fit_score >= 0.6:
         return "apply"
     return "skip"
@@ -32,7 +32,7 @@ def should_apply(state: ApplicationState) -> str:
 
 def has_more_jobs(state: ApplicationState) -> str:
     """Check if there are more jobs to process."""
-    if state.current_job_index < len(state.jobs):
+    if state["current_job_index"] < len(state["jobs"]):
         return "next"
     return "done"
 
@@ -40,8 +40,8 @@ def has_more_jobs(state: ApplicationState) -> str:
 def skip_job(state: ApplicationState) -> dict[str, Any]:
     """Advance past a low-scoring job, incrementing the skip counter."""
     return {
-        "current_job_index": state.current_job_index + 1,
-        "total_skipped": state.total_skipped + 1,
+        "current_job_index": state["current_job_index"] + 1,
+        "total_skipped": state["total_skipped"] + 1,
     }
 
 

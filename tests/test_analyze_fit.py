@@ -39,12 +39,16 @@ class TestAnalyzeFit:
                     description="Looking for a Python developer with Django experience.",
                 ),
             ]
-        return ApplicationState(
-            resume=resume,
-            jobs=jobs,
-            current_job_index=current_job_index,
-            errors=errors or [],
-        )
+        return {
+            "resume": resume,
+            "jobs": jobs,
+            "current_job_index": current_job_index,
+            "errors": errors or [],
+            "resume_path": "",
+            "job_urls": [],
+            "total_applied": 0,
+            "total_skipped": 0,
+        }
 
     @patch("apply_operator.nodes.analyze_fit.call_llm")
     def test_scores_job_with_valid_response(self, mock_call_llm: Any) -> None:
@@ -140,14 +144,15 @@ class TestAnalyzeFit:
         assert result["jobs"][1].fit_score == 0.9  # scored
 
     @patch("apply_operator.nodes.analyze_fit.call_llm")
-    def test_preserves_existing_errors(self, mock_call_llm: Any) -> None:
+    def test_returns_only_new_errors(self, mock_call_llm: Any) -> None:
+        """With the reducer, nodes return only new errors (framework accumulates)."""
         mock_call_llm.return_value = "not json"
-        state = self._make_state(errors=["previous error"])
+        state = self._make_state()
 
         result = analyze_fit(state)
 
-        assert "previous error" in result["errors"]
-        assert len(result["errors"]) == 2
+        assert len(result["errors"]) == 1
+        assert "Fit analysis failed" in result["errors"][0]
 
     @patch("apply_operator.nodes.analyze_fit.call_llm")
     def test_prompt_includes_resume_and_job_data(self, mock_call_llm: Any) -> None:
@@ -169,14 +174,14 @@ class TestSkipJob:
     def test_advances_index_and_increments_skipped(self) -> None:
         from apply_operator.graph import skip_job
 
-        state = ApplicationState(
-            jobs=[
+        state: ApplicationState = {
+            "jobs": [
                 JobListing(url="https://example.com/1", fit_score=0.3),
                 JobListing(url="https://example.com/2"),
             ],
-            current_job_index=0,
-            total_skipped=0,
-        )
+            "current_job_index": 0,
+            "total_skipped": 0,
+        }
 
         result = skip_job(state)
 
@@ -190,46 +195,46 @@ class TestShouldApply:
     def test_routes_apply_for_high_score(self) -> None:
         from apply_operator.graph import should_apply
 
-        state = ApplicationState(
-            jobs=[JobListing(url="https://example.com/1", fit_score=0.8)],
-            current_job_index=0,
-        )
+        state: ApplicationState = {
+            "jobs": [JobListing(url="https://example.com/1", fit_score=0.8)],
+            "current_job_index": 0,
+        }
 
         assert should_apply(state) == "apply"
 
     def test_routes_skip_for_low_score(self) -> None:
         from apply_operator.graph import should_apply
 
-        state = ApplicationState(
-            jobs=[JobListing(url="https://example.com/1", fit_score=0.3)],
-            current_job_index=0,
-        )
+        state: ApplicationState = {
+            "jobs": [JobListing(url="https://example.com/1", fit_score=0.3)],
+            "current_job_index": 0,
+        }
 
         assert should_apply(state) == "skip"
 
     def test_routes_apply_at_threshold(self) -> None:
         from apply_operator.graph import should_apply
 
-        state = ApplicationState(
-            jobs=[JobListing(url="https://example.com/1", fit_score=0.6)],
-            current_job_index=0,
-        )
+        state: ApplicationState = {
+            "jobs": [JobListing(url="https://example.com/1", fit_score=0.6)],
+            "current_job_index": 0,
+        }
 
         assert should_apply(state) == "apply"
 
     def test_routes_report_when_all_processed(self) -> None:
         from apply_operator.graph import should_apply
 
-        state = ApplicationState(
-            jobs=[JobListing(url="https://example.com/1", fit_score=0.8)],
-            current_job_index=1,
-        )
+        state: ApplicationState = {
+            "jobs": [JobListing(url="https://example.com/1", fit_score=0.8)],
+            "current_job_index": 1,
+        }
 
         assert should_apply(state) == "report"
 
     def test_routes_report_for_empty_jobs(self) -> None:
         from apply_operator.graph import should_apply
 
-        state = ApplicationState(jobs=[], current_job_index=0)
+        state: ApplicationState = {"jobs": [], "current_job_index": 0}
 
         assert should_apply(state) == "report"

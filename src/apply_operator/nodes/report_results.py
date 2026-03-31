@@ -18,10 +18,10 @@ def report_results(state: ApplicationState) -> dict[str, Any]:
     Writes application results to data/results.json for later review.
     """
     results = {
-        "total_applied": state.total_applied,
-        "total_skipped": state.total_skipped,
-        "errors": state.errors,
-        "jobs": [job.model_dump() for job in state.jobs],
+        "total_applied": state["total_applied"],
+        "total_skipped": state["total_skipped"],
+        "errors": state.get("errors", []),
+        "jobs": [job.model_dump() for job in state["jobs"]],
     }
 
     output_path = Path("data/results.json")
@@ -30,9 +30,9 @@ def report_results(state: ApplicationState) -> dict[str, Any]:
     logger.info(
         "Results saved to %s | applied=%d skipped=%d errors=%d",
         output_path,
-        state.total_applied,
-        state.total_skipped,
-        len(state.errors),
+        state["total_applied"],
+        state["total_skipped"],
+        len(state.get("errors", [])),
     )
 
     return {}

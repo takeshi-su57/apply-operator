@@ -112,9 +112,9 @@ async def search_jobs(state: ApplicationState) -> dict[str, Any]:
     Handles login walls via user intervention and follows pagination.
     """
     all_jobs: list[JobListing] = []
-    errors = list(state.errors)
+    errors: list[str] = []
 
-    for url in state.job_urls:
+    for url in state["job_urls"]:
         try:
             logger.info("Opening browser for %s", url)
             async with get_page_with_session(url) as page:
