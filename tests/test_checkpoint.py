@@ -86,6 +86,10 @@ def _fake_fill(state: ApplicationState) -> dict[str, Any]:
     }
 
 
+def _noop_cover_letter(state: ApplicationState) -> dict[str, Any]:
+    return {}
+
+
 def _noop_report(state: ApplicationState) -> dict[str, Any]:
     return {}
 
@@ -100,6 +104,7 @@ def _build_mocked_graph(
         patch("apply_operator.graph.parse_resume", _fake_parse),
         patch("apply_operator.graph.search_jobs", _fake_search(jobs)),
         patch("apply_operator.graph.analyze_fit", _fake_analyze(scores)),
+        patch("apply_operator.graph.generate_cover_letter", _noop_cover_letter),
         patch("apply_operator.graph.fill_application", _fake_fill),
         patch("apply_operator.graph.report_results", _noop_report),
     ]
@@ -157,9 +162,7 @@ class TestCreateCheckpointer:
 
 class TestCheckpointSaveAndResume:
     @pytest.mark.asyncio
-    async def test_run_saves_checkpoints(
-        self, async_checkpoint_saver: AsyncSqliteSaver
-    ) -> None:
+    async def test_run_saves_checkpoints(self, async_checkpoint_saver: AsyncSqliteSaver) -> None:
         """A completed run has checkpoints and get_state().next is empty."""
         jobs = _make_jobs(1)
         scores = [0.8]
@@ -167,7 +170,14 @@ class TestCheckpointSaveAndResume:
 
         config = {"configurable": {"thread_id": "test-save-1"}}
         await graph.ainvoke(
-            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0},
+            {
+                "resume_path": "test.pdf",
+                "job_urls": ["https://example.com"],
+                "errors": [],
+                "total_applied": 0,
+                "total_skipped": 0,
+                "current_job_index": 0,
+            },
             config=config,
         )
 
@@ -176,9 +186,7 @@ class TestCheckpointSaveAndResume:
         assert not snapshot.next
 
     @pytest.mark.asyncio
-    async def test_completed_run_not_rerun(
-        self, async_checkpoint_saver: AsyncSqliteSaver
-    ) -> None:
+    async def test_completed_run_not_rerun(self, async_checkpoint_saver: AsyncSqliteSaver) -> None:
         """Invoking a completed run again with None yields no new node executions."""
         jobs = _make_jobs(1)
         scores = [0.8]
@@ -186,7 +194,14 @@ class TestCheckpointSaveAndResume:
 
         config = {"configurable": {"thread_id": "test-no-rerun"}}
         await graph.ainvoke(
-            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0},
+            {
+                "resume_path": "test.pdf",
+                "job_urls": ["https://example.com"],
+                "errors": [],
+                "total_applied": 0,
+                "total_skipped": 0,
+                "current_job_index": 0,
+            },
             config=config,
         )
 
@@ -198,9 +213,7 @@ class TestCheckpointSaveAndResume:
         assert node_names == [], f"Expected no nodes to run, got: {node_names}"
 
     @pytest.mark.asyncio
-    async def test_thread_id_isolation(
-        self, async_checkpoint_saver: AsyncSqliteSaver
-    ) -> None:
+    async def test_thread_id_isolation(self, async_checkpoint_saver: AsyncSqliteSaver) -> None:
         """Two runs with different thread_ids have independent state."""
         jobs = _make_jobs(1)
 
@@ -210,7 +223,14 @@ class TestCheckpointSaveAndResume:
         config1 = {"configurable": {"thread_id": "test-isolation-1"}}
         config2 = {"configurable": {"thread_id": "test-isolation-2"}}
 
-        initial = {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+        initial = {
+            "resume_path": "test.pdf",
+            "job_urls": ["https://example.com"],
+            "errors": [],
+            "total_applied": 0,
+            "total_skipped": 0,
+            "current_job_index": 0,
+        }
 
         result1 = await graph1.ainvoke(initial, config=config1)
         result2 = await graph2.ainvoke(initial, config=config2)
@@ -220,9 +240,7 @@ class TestCheckpointSaveAndResume:
         assert result2["total_skipped"] == 1
 
     @pytest.mark.asyncio
-    async def test_resume_from_interrupted(
-        self, async_checkpoint_saver: AsyncSqliteSaver
-    ) -> None:
+    async def test_resume_from_interrupted(self, async_checkpoint_saver: AsyncSqliteSaver) -> None:
         """A run interrupted mid-pipeline can be resumed."""
         call_count = 0
 
@@ -237,6 +255,7 @@ class TestCheckpointSaveAndResume:
             patch("apply_operator.graph.parse_resume", _fake_parse),
             patch("apply_operator.graph.search_jobs", _failing_search),
             patch("apply_operator.graph.analyze_fit", _fake_analyze([0.8])),
+            patch("apply_operator.graph.generate_cover_letter", _noop_cover_letter),
             patch("apply_operator.graph.fill_application", _fake_fill),
             patch("apply_operator.graph.report_results", _noop_report),
         ]
@@ -249,7 +268,14 @@ class TestCheckpointSaveAndResume:
             graph = build_graph(checkpointer=async_checkpoint_saver)
 
             config = {"configurable": {"thread_id": "test-resume"}}
-            initial = {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+            initial = {
+                "resume_path": "test.pdf",
+                "job_urls": ["https://example.com"],
+                "errors": [],
+                "total_applied": 0,
+                "total_skipped": 0,
+                "current_job_index": 0,
+            }
 
             with pytest.raises(RuntimeError, match="Simulated crash"):
                 await graph.ainvoke(initial, config=config)
@@ -275,16 +301,21 @@ class TestGetRunSummaries:
         assert runs == []
 
     @pytest.mark.asyncio
-    async def test_shows_completed_run(
-        self, async_checkpoint_saver: AsyncSqliteSaver
-    ) -> None:
+    async def test_shows_completed_run(self, async_checkpoint_saver: AsyncSqliteSaver) -> None:
         """Run completes, then verify summaries via the same saver."""
         jobs = _make_jobs(1)
         graph = _build_mocked_graph(async_checkpoint_saver, jobs, [0.7])
 
         config = {"configurable": {"thread_id": "test-list-completed"}}
         await graph.ainvoke(
-            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0},
+            {
+                "resume_path": "test.pdf",
+                "job_urls": ["https://example.com"],
+                "errors": [],
+                "total_applied": 0,
+                "total_skipped": 0,
+                "current_job_index": 0,
+            },
             config=config,
         )
 
@@ -295,9 +326,7 @@ class TestGetRunSummaries:
         assert not snapshot.next  # completed
 
     @pytest.mark.asyncio
-    async def test_shows_interrupted_run(
-        self, async_checkpoint_saver: AsyncSqliteSaver
-    ) -> None:
+    async def test_shows_interrupted_run(self, async_checkpoint_saver: AsyncSqliteSaver) -> None:
         def _crash_search(state: ApplicationState) -> dict[str, Any]:
             raise RuntimeError("boom")
 
@@ -305,6 +334,7 @@ class TestGetRunSummaries:
             patch("apply_operator.graph.parse_resume", _fake_parse),
             patch("apply_operator.graph.search_jobs", _crash_search),
             patch("apply_operator.graph.analyze_fit", _fake_analyze([0.8])),
+            patch("apply_operator.graph.generate_cover_letter", _noop_cover_letter),
             patch("apply_operator.graph.fill_application", _fake_fill),
             patch("apply_operator.graph.report_results", _noop_report),
         ]
@@ -319,7 +349,14 @@ class TestGetRunSummaries:
             config = {"configurable": {"thread_id": "test-list-interrupted"}}
             with pytest.raises(RuntimeError):
                 await graph.ainvoke(
-                    {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0},
+                    {
+                        "resume_path": "test.pdf",
+                        "job_urls": ["https://example.com"],
+                        "errors": [],
+                        "total_applied": 0,
+                        "total_skipped": 0,
+                        "current_job_index": 0,
+                    },
                     config=config,
                 )
 

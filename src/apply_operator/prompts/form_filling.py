@@ -16,6 +16,7 @@ Summary: {summary}
 Skills: {skills}
 Experience: {experience}
 Education: {education}
+{cover_letter}
 
 ## Instructions
 Return a JSON object mapping each field's **name** attribute to the value to fill in.
@@ -25,8 +26,8 @@ Rules:
 - For select/dropdown fields: return the **exact option text** from the available options list.
 - For checkbox/radio fields: return "true" or "false".
 - For file upload fields: return "RESUME_FILE".
-- If a field asks for a cover letter or "why do you want to work here", compose a brief \
-2-3 sentence answer using the candidate's summary and the job context.
+- If a field asks for a cover letter or "why do you want to work here", use the Cover Letter \
+provided above. If no cover letter is provided, compose a brief 2-3 sentence answer.
 - If a field asks for information not available in the candidate data, return an empty string.
 - Do NOT invent information that is not in the candidate data.
 
