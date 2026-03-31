@@ -77,9 +77,7 @@ class TestLogNodeAsync:
         assert any("my_async_node | completed" in m for m in messages)
 
     @pytest.mark.asyncio
-    async def test_exception_logged_and_reraised(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_exception_logged_and_reraised(self, caplog: pytest.LogCaptureFixture) -> None:
         @log_node
         async def failing_async_node(state: Any) -> dict[str, Any]:
             raise RuntimeError("async boom")
