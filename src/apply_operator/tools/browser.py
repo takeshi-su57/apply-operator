@@ -12,6 +12,7 @@ from playwright.async_api import Browser, Page, async_playwright
 from rich.console import Console
 
 from apply_operator.config import get_settings
+from apply_operator.tools.retry import PageTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,58 @@ async def get_page_with_session(url: str) -> AsyncGenerator[Page, None]:
         finally:
             await context.close()
             logger.info("Session saved to %s", user_data_dir)
+
+
+async def navigate_with_retry(
+    page: Page,
+    url: str,
+    *,
+    timeout_ms: int | None = None,
+    max_retries: int = 3,
+) -> None:
+    """Navigate to a URL with automatic retry on timeout.
+
+    Catches Playwright ``TimeoutError`` and retries with exponential backoff.
+    After exhausting retries, raises :class:`PageTimeoutError`.
+
+    Args:
+        page: Playwright page to navigate.
+        url: Target URL.
+        timeout_ms: Navigation timeout in milliseconds. Falls back to
+            ``browser_timeout`` from settings when ``None``.
+        max_retries: Maximum number of retry attempts.
+    """
+    settings = get_settings()
+    effective_timeout = timeout_ms or settings.browser_timeout
+
+    last_exc: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            await page.goto(
+                url,
+                timeout=effective_timeout,
+                wait_until="domcontentloaded",
+            )
+            return
+        except Exception as exc:
+            # Only retry on Playwright timeout errors.
+            if "timeout" not in type(exc).__name__.lower():
+                raise
+            last_exc = exc
+            if attempt < max_retries:
+                delay = min(1.0 * (2**attempt), 30.0)
+                logger.warning(
+                    "Page timeout | %s | attempt %d/%d | retrying in %.1fs",
+                    url,
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+
+    raise PageTimeoutError(
+        f"Navigation to {url} timed out after {max_retries} retries"
+    ) from last_exc
 
 
 async def wait_for_page_ready(

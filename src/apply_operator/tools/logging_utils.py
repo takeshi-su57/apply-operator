@@ -33,7 +33,10 @@ def log_node(func: Any) -> Any:
                 elapsed = time.perf_counter() - start
                 logger.error(
                     "node=%s | failed | %.2fs | %s: %s",
-                    node_name, elapsed, type(e).__name__, e,
+                    node_name,
+                    elapsed,
+                    type(e).__name__,
+                    e,
                 )
                 raise
 
@@ -52,7 +55,10 @@ def log_node(func: Any) -> Any:
             elapsed = time.perf_counter() - start
             logger.error(
                 "node=%s | failed | %.2fs | %s: %s",
-                node_name, elapsed, type(e).__name__, e,
+                node_name,
+                elapsed,
+                type(e).__name__,
+                e,
             )
             raise
 

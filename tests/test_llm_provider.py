@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from apply_operator.config import Settings
+from apply_operator.tools.retry import FatalConfigError, LLMInvalidJSONError, LLMRateLimitError
 
 
 def _make_settings(**overrides: str) -> Settings:
@@ -76,9 +77,7 @@ class TestGetLlm:
         assert result is mock_cls.return_value
 
     @patch("apply_operator.tools.llm_provider.get_settings")
-    def test_raises_value_error_for_unknown_provider(
-        self, mock_settings: MagicMock
-    ) -> None:
+    def test_raises_value_error_for_unknown_provider(self, mock_settings: MagicMock) -> None:
         settings = _make_settings()
         object.__setattr__(settings, "llm_provider", "unknown")
         mock_settings.return_value = settings
@@ -102,3 +101,78 @@ class TestCallLlm:
         result = call_llm("Say hello")
         assert result == "Hello from LLM"
         mock_llm.invoke.assert_called_once_with("Say hello")
+
+    @patch("apply_operator.tools.llm_provider.time.sleep")
+    @patch("apply_operator.tools.llm_provider.get_llm")
+    def test_retries_on_rate_limit(self, mock_get_llm: MagicMock, mock_sleep: MagicMock) -> None:
+        rate_exc = Exception("Rate limit exceeded")
+        rate_exc.status_code = 429  # type: ignore[attr-defined]
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = [rate_exc, rate_exc, MagicMock(content="ok")]
+        mock_get_llm.return_value = mock_llm
+
+        from apply_operator.tools.llm_provider import call_llm
+
+        result = call_llm("test prompt")
+        assert result == "ok"
+        assert mock_llm.invoke.call_count == 3
+        assert mock_sleep.call_count == 2
+
+    @patch("apply_operator.tools.llm_provider.get_llm")
+    def test_raises_fatal_on_auth_error(self, mock_get_llm: MagicMock) -> None:
+        class AuthenticationError(Exception):
+            pass
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = AuthenticationError("invalid key")
+        mock_get_llm.return_value = mock_llm
+
+        from apply_operator.tools.llm_provider import call_llm
+
+        with pytest.raises(FatalConfigError, match="Authentication failed"):
+            call_llm("test prompt")
+
+    @patch("apply_operator.tools.llm_provider.get_llm")
+    def test_json_retry_on_invalid_json(self, mock_get_llm: MagicMock) -> None:
+        mock_llm = MagicMock()
+        # First call returns invalid JSON, second returns valid JSON
+        mock_llm.invoke.side_effect = [
+            MagicMock(content="not json at all"),
+            MagicMock(content='{"score": 0.8}'),
+        ]
+        mock_get_llm.return_value = mock_llm
+
+        from apply_operator.tools.llm_provider import call_llm
+
+        result = call_llm("test prompt", expect_json=True)
+        assert result == '{"score": 0.8}'
+        assert mock_llm.invoke.call_count == 2
+
+    @patch("apply_operator.tools.llm_provider.get_llm")
+    def test_json_retry_raises_on_persistent_bad_json(self, mock_get_llm: MagicMock) -> None:
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value.content = "not json"
+        mock_get_llm.return_value = mock_llm
+
+        from apply_operator.tools.llm_provider import call_llm
+
+        with pytest.raises(LLMInvalidJSONError, match="invalid JSON after retry"):
+            call_llm("test prompt", expect_json=True)
+
+    @patch("apply_operator.tools.llm_provider.time.sleep")
+    @patch("apply_operator.tools.llm_provider.get_llm")
+    def test_raises_rate_limit_after_exhausted_retries(
+        self, mock_get_llm: MagicMock, mock_sleep: MagicMock
+    ) -> None:
+        rate_exc = Exception("Rate limit exceeded")
+        rate_exc.status_code = 429  # type: ignore[attr-defined]
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = rate_exc
+        mock_get_llm.return_value = mock_llm
+
+        from apply_operator.tools.llm_provider import call_llm
+
+        with pytest.raises(LLMRateLimitError):
+            call_llm("test prompt")

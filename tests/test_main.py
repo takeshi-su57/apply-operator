@@ -290,11 +290,13 @@ class TestRunGraph:
     async def test_returns_state_duration_and_step_times(self) -> None:
         """_run_graph returns a tuple of (state, duration, step_times)."""
         mock_graph = AsyncMock()
-        mock_graph.astream = lambda *a, **kw: _async_iter([
-            {"parse_resume": {"resume": "data"}},
-            {"search_jobs": {"jobs": [], "current_job_index": 0}},
-            {"report_results": {}},
-        ])
+        mock_graph.astream = lambda *a, **kw: _async_iter(
+            [
+                {"parse_resume": {"resume": "data"}},
+                {"search_jobs": {"jobs": [], "current_job_index": 0}},
+                {"report_results": {}},
+            ]
+        )
 
         test_console = Console(file=StringIO(), width=80)
         with patch("apply_operator.main.console", test_console):
@@ -309,17 +311,21 @@ class TestRunGraph:
     async def test_extracts_counters_from_events(self) -> None:
         """Progress counters are extracted from node outputs."""
         mock_graph = AsyncMock()
-        mock_graph.astream = lambda *a, **kw: _async_iter([
-            {"parse_resume": {"resume": "data"}},
-            {"search_jobs": {"jobs": [1, 2, 3], "current_job_index": 0}},
-            {"analyze_fit": {"jobs": [1, 2, 3]}},
-            {"fill_application": {
-                "jobs": [1, 2, 3],
-                "current_job_index": 1,
-                "total_applied": 1,
-            }},
-            {"report_results": {}},
-        ])
+        mock_graph.astream = lambda *a, **kw: _async_iter(
+            [
+                {"parse_resume": {"resume": "data"}},
+                {"search_jobs": {"jobs": [1, 2, 3], "current_job_index": 0}},
+                {"analyze_fit": {"jobs": [1, 2, 3]}},
+                {
+                    "fill_application": {
+                        "jobs": [1, 2, 3],
+                        "current_job_index": 1,
+                        "total_applied": 1,
+                    }
+                },
+                {"report_results": {}},
+            ]
+        )
 
         test_console = Console(file=StringIO(), width=80)
         with patch("apply_operator.main.console", test_console):
@@ -333,11 +339,13 @@ class TestRunGraph:
     async def test_step_times_populated(self) -> None:
         """Each node gets a timing entry in step_times."""
         mock_graph = AsyncMock()
-        mock_graph.astream = lambda *a, **kw: _async_iter([
-            {"parse_resume": {"resume": "data"}},
-            {"search_jobs": {"jobs": []}},
-            {"report_results": {}},
-        ])
+        mock_graph.astream = lambda *a, **kw: _async_iter(
+            [
+                {"parse_resume": {"resume": "data"}},
+                {"search_jobs": {"jobs": []}},
+                {"report_results": {}},
+            ]
+        )
 
         test_console = Console(file=StringIO(), width=80)
         with patch("apply_operator.main.console", test_console):
@@ -351,10 +359,12 @@ class TestRunGraph:
     async def test_verbose_flag_passed_through(self) -> None:
         """Verbose mode does not crash."""
         mock_graph = AsyncMock()
-        mock_graph.astream = lambda *a, **kw: _async_iter([
-            {"parse_resume": {"resume": "data"}},
-            {"report_results": {}},
-        ])
+        mock_graph.astream = lambda *a, **kw: _async_iter(
+            [
+                {"parse_resume": {"resume": "data"}},
+                {"report_results": {}},
+            ]
+        )
 
         test_console = Console(file=StringIO(), width=80)
         with patch("apply_operator.main.console", test_console):

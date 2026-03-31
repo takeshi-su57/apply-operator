@@ -9,6 +9,7 @@ from apply_operator.prompts.job_matching import ANALYZE_FIT
 from apply_operator.state import ApplicationState
 from apply_operator.tools.llm_provider import call_llm
 from apply_operator.tools.logging_utils import log_node
+from apply_operator.tools.retry import FatalConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,11 @@ def analyze_fit(state: ApplicationState) -> dict[str, Any]:
     errors = list(state.errors)
 
     try:
-        response = call_llm(prompt, purpose=f"analyze_fit for {job.title} at {job.company}")
+        response = call_llm(
+            prompt,
+            purpose=f"analyze_fit for {job.title} at {job.company}",
+            expect_json=True,
+        )
         cleaned = _strip_markdown_json(response)
         data = json.loads(cleaned)
 
@@ -82,6 +87,8 @@ def analyze_fit(state: ApplicationState) -> dict[str, Any]:
                 score,
                 job.url,
             )
+    except FatalConfigError:
+        raise
     except (json.JSONDecodeError, ValueError, TypeError, KeyError) as e:
         logger.error("Failed to parse LLM fit response for %s: %s", job.url, e)
         errors.append(f"Fit analysis failed for {job.url}: {e}")

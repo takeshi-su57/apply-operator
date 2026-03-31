@@ -21,9 +21,7 @@ VALID_LLM_RESPONSE = json.dumps(
                 "description": "Led backend development",
             }
         ],
-        "education": [
-            {"degree": "BS Computer Science", "institution": "MIT", "year": "2020"}
-        ],
+        "education": [{"degree": "BS Computer Science", "institution": "MIT", "year": "2020"}],
         "summary": "Experienced software engineer.",
     }
 )
@@ -50,9 +48,7 @@ class TestStripMarkdownJson:
 class TestParseResume:
     @patch("apply_operator.nodes.parse_resume.call_llm")
     @patch("apply_operator.nodes.parse_resume.extract_text")
-    def test_parses_valid_json_response(
-        self, mock_extract: Any, mock_llm: Any
-    ) -> None:
+    def test_parses_valid_json_response(self, mock_extract: Any, mock_llm: Any) -> None:
         mock_extract.return_value = "John Doe\njohn@example.com"
         mock_llm.return_value = VALID_LLM_RESPONSE
 
@@ -87,9 +83,7 @@ class TestParseResume:
 
     @patch("apply_operator.nodes.parse_resume.call_llm")
     @patch("apply_operator.nodes.parse_resume.extract_text")
-    def test_handles_markdown_wrapped_json(
-        self, mock_extract: Any, mock_llm: Any
-    ) -> None:
+    def test_handles_markdown_wrapped_json(self, mock_extract: Any, mock_llm: Any) -> None:
         mock_extract.return_value = "John Doe\njohn@example.com"
         mock_llm.return_value = f"```json\n{VALID_LLM_RESPONSE}\n```"
 
@@ -101,9 +95,7 @@ class TestParseResume:
 
     @patch("apply_operator.nodes.parse_resume.call_llm")
     @patch("apply_operator.nodes.parse_resume.extract_text")
-    def test_handles_empty_resume_text(
-        self, mock_extract: Any, mock_llm: Any
-    ) -> None:
+    def test_handles_empty_resume_text(self, mock_extract: Any, mock_llm: Any) -> None:
         mock_extract.return_value = ""
         mock_llm.return_value = json.dumps({"name": "", "email": "", "skills": []})
 
@@ -143,9 +135,7 @@ class TestParseResume:
 
     @patch("apply_operator.nodes.parse_resume.call_llm")
     @patch("apply_operator.nodes.parse_resume.extract_text")
-    def test_handles_validation_error(
-        self, mock_extract: Any, mock_llm: Any
-    ) -> None:
+    def test_handles_validation_error(self, mock_extract: Any, mock_llm: Any) -> None:
         mock_extract.return_value = "some text"
         # skills should be a list, not a string — triggers ValidationError
         mock_llm.return_value = json.dumps({"skills": 12345})
@@ -159,9 +149,7 @@ class TestParseResume:
 
     @patch("apply_operator.nodes.parse_resume.call_llm")
     @patch("apply_operator.nodes.parse_resume.extract_text")
-    def test_preserves_existing_errors(
-        self, mock_extract: Any, mock_llm: Any
-    ) -> None:
+    def test_preserves_existing_errors(self, mock_extract: Any, mock_llm: Any) -> None:
         mock_extract.return_value = "text"
         mock_llm.return_value = "bad json"
 
