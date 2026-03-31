@@ -9,6 +9,7 @@ from playwright.async_api import Page
 
 from apply_operator.prompts.form_filling import DETECT_FORM_PAGE_TYPE, MAP_FORM_FIELDS
 from apply_operator.state import ApplicationState, JobListing, ResumeData
+from apply_operator.tools.adapters import get_adapter
 from apply_operator.tools.browser import (
     FormField,
     get_form_fields,
@@ -277,6 +278,21 @@ async def fill_application(state: ApplicationState) -> dict[str, Any]:
 
             # Pre-form CAPTCHA check
             await handle_captcha_if_present(page)
+
+            # Try site-specific adapter first
+            adapter = get_adapter(job.url)
+            if adapter:
+                logger.info("Using %s adapter for %s", adapter.domain, job.url)
+                success = await adapter.fill_application(page, state["resume"], job)
+                if success:
+                    logger.info("Adapter applied to %s at %s", job.title, job.company)
+                    jobs[idx] = job.model_copy(update={"applied": True})
+                    return {
+                        "jobs": jobs,
+                        "current_job_index": idx + 1,
+                        "total_applied": state["total_applied"] + 1,
+                    }
+                logger.info("Adapter returned False, falling back to generic")
 
             form_filled = False
 
