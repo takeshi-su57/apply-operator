@@ -48,16 +48,17 @@ def analyze_fit(state: ApplicationState) -> dict[str, Any]:
     Scores the job at current_job_index without advancing the index.
     The graph's conditional edges handle routing (apply/skip/report).
     """
-    idx = state.current_job_index
-    if idx >= len(state.jobs):
+    idx = state["current_job_index"]
+    if idx >= len(state["jobs"]):
         return {}
 
-    job = state.jobs[idx]
+    job = state["jobs"][idx]
 
+    resume = state["resume"]
     prompt = ANALYZE_FIT.format(
-        name=state.resume.name,
-        skills=", ".join(state.resume.skills) if state.resume.skills else "None listed",
-        experience=_format_experience(state.resume.experience),
+        name=resume.name,
+        skills=", ".join(resume.skills) if resume.skills else "None listed",
+        experience=_format_experience(resume.experience),
         job_title=job.title,
         company=job.company,
         job_description=job.description,
@@ -65,7 +66,7 @@ def analyze_fit(state: ApplicationState) -> dict[str, Any]:
 
     score = 0.0
     reasoning = ""
-    errors = list(state.errors)
+    errors: list[str] = []
 
     try:
         response = call_llm(
@@ -101,10 +102,10 @@ def analyze_fit(state: ApplicationState) -> dict[str, Any]:
         reasoning or "no reasoning",
     )
 
-    updated_jobs = list(state.jobs)
+    updated_jobs = list(state["jobs"])
     updated_jobs[idx] = job.model_copy(update={"fit_score": score})
 
     result: dict[str, Any] = {"jobs": updated_jobs}
-    if errors != list(state.errors):
+    if errors:
         result["errors"] = errors
     return result

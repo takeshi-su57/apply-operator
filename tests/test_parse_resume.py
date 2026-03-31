@@ -52,7 +52,7 @@ class TestParseResume:
         mock_extract.return_value = "John Doe\njohn@example.com"
         mock_llm.return_value = VALID_LLM_RESPONSE
 
-        state = ApplicationState(resume_path="resume.pdf")
+        state = {"resume_path": "resume.pdf"}
         result = parse_resume(state)
 
         assert "resume" in result
@@ -73,7 +73,7 @@ class TestParseResume:
         mock_extract.return_value = "some resume text"
         mock_llm.return_value = "not valid json at all"
 
-        state = ApplicationState(resume_path="resume.pdf")
+        state = {"resume_path": "resume.pdf"}
         result = parse_resume(state)
 
         assert result["resume"].raw_text == "some resume text"
@@ -87,7 +87,7 @@ class TestParseResume:
         mock_extract.return_value = "John Doe\njohn@example.com"
         mock_llm.return_value = f"```json\n{VALID_LLM_RESPONSE}\n```"
 
-        state = ApplicationState(resume_path="resume.pdf")
+        state = {"resume_path": "resume.pdf"}
         result = parse_resume(state)
 
         assert "errors" not in result
@@ -99,7 +99,7 @@ class TestParseResume:
         mock_extract.return_value = ""
         mock_llm.return_value = json.dumps({"name": "", "email": "", "skills": []})
 
-        state = ApplicationState(resume_path="resume.pdf")
+        state = {"resume_path": "resume.pdf"}
         result = parse_resume(state)
 
         assert result["resume"].raw_text == ""
@@ -120,7 +120,7 @@ class TestParseResume:
             }
         )
 
-        state = ApplicationState(resume_path="resume.pdf")
+        state = {"resume_path": "resume.pdf"}
         result = parse_resume(state)
 
         assert "errors" not in result
@@ -140,7 +140,7 @@ class TestParseResume:
         # skills should be a list, not a string — triggers ValidationError
         mock_llm.return_value = json.dumps({"skills": 12345})
 
-        state = ApplicationState(resume_path="resume.pdf")
+        state = {"resume_path": "resume.pdf"}
         result = parse_resume(state)
 
         assert result["resume"].raw_text == "some text"
@@ -149,12 +149,13 @@ class TestParseResume:
 
     @patch("apply_operator.nodes.parse_resume.call_llm")
     @patch("apply_operator.nodes.parse_resume.extract_text")
-    def test_preserves_existing_errors(self, mock_extract: Any, mock_llm: Any) -> None:
+    def test_returns_only_new_errors(self, mock_extract: Any, mock_llm: Any) -> None:
+        """With the reducer, nodes return only new errors (framework accumulates)."""
         mock_extract.return_value = "text"
         mock_llm.return_value = "bad json"
 
-        state = ApplicationState(resume_path="resume.pdf", errors=["prior error"])
+        state: ApplicationState = {"resume_path": "resume.pdf"}
         result = parse_resume(state)
 
-        assert result["errors"][0] == "prior error"
-        assert "Resume parse failed" in result["errors"][1]
+        assert len(result["errors"]) == 1
+        assert "Resume parse failed" in result["errors"][0]

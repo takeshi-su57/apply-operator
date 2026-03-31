@@ -21,9 +21,10 @@ def _make_state(**kwargs: Any) -> ApplicationState:
     defaults: dict[str, Any] = {
         "resume_path": "test.pdf",
         "job_urls": ["https://example.com/jobs"],
+        "errors": [],
     }
     defaults.update(kwargs)
-    return ApplicationState(**defaults)
+    return defaults
 
 
 def _mock_page(url: str = "https://example.com/jobs", text: str = "") -> AsyncMock:

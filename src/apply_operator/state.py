@@ -1,6 +1,7 @@
 """LangGraph state definitions for the job application agent."""
 
-from typing import Any
+import operator
+from typing import Annotated, Any, TypedDict
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -56,24 +57,27 @@ class JobListing(BaseModel):
     error: str = ""
 
 
-class ApplicationState(BaseModel):
+class ApplicationState(TypedDict, total=False):
     """Central state flowing through the LangGraph agent.
 
-    Nodes receive this state and return a dict of fields to update.
+    Nodes receive this state as a dict and return a dict of fields to update.
+    The ``errors`` field uses an ``operator.add`` reducer so that each node
+    can return only its *new* errors and LangGraph concatenates them
+    automatically.
     """
 
     # Inputs
-    resume_path: str = ""
-    job_urls: list[str] = Field(default_factory=list)
+    resume_path: str
+    job_urls: list[str]
 
     # Parsed resume
-    resume: ResumeData = Field(default_factory=ResumeData)
+    resume: ResumeData
 
     # Job search results
-    jobs: list[JobListing] = Field(default_factory=list)
-    current_job_index: int = 0
+    jobs: list[JobListing]
+    current_job_index: int
 
     # Tracking
-    total_applied: int = 0
-    total_skipped: int = 0
-    errors: list[str] = Field(default_factory=list)
+    total_applied: int
+    total_skipped: int
+    errors: Annotated[list[str], operator.add]

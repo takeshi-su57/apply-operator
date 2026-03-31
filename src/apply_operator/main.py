@@ -68,7 +68,14 @@ def run(
     async def _run_with_checkpoint() -> tuple[dict[str, Any], float, dict[str, float]]:
         async with create_async_checkpointer() as checkpointer:
             graph = build_graph(checkpointer=checkpointer)
-            initial = ApplicationState(resume_path=str(resume), job_urls=job_urls)
+            initial: ApplicationState = {
+                "resume_path": str(resume),
+                "job_urls": job_urls,
+                "current_job_index": 0,
+                "total_applied": 0,
+                "total_skipped": 0,
+                "errors": [],
+            }
             config = {"configurable": {"thread_id": thread_id}}
             return await _run_graph(graph, initial, verbose, config=config)
 
@@ -151,6 +158,13 @@ async def _run_graph(
 
                 # Extract progress counters from node output
                 if node_output:
+                    # Accumulate errors via extend (reducer returns only new errors)
+                    if "errors" in node_output:
+                        final_state.setdefault("errors", [])
+                        final_state["errors"].extend(node_output["errors"])
+                        error_count = len(final_state["errors"])
+                        # Remove from node_output before update to avoid overwrite
+                        node_output = {k: v for k, v in node_output.items() if k != "errors"}
                     final_state.update(node_output)
                     if "jobs" in node_output:
                         total_jobs = len(node_output["jobs"])
@@ -160,8 +174,6 @@ async def _run_graph(
                         skipped = node_output["total_skipped"]
                     if "current_job_index" in node_output:
                         processed = node_output["current_job_index"]
-                    if "errors" in node_output:
-                        error_count = len(node_output["errors"])
 
             elapsed = now - pipeline_start
             live.update(
@@ -212,7 +224,7 @@ def parse_resume(
     from apply_operator.nodes.parse_resume import parse_resume as _parse_resume
     from apply_operator.state import ApplicationState
 
-    state = ApplicationState(resume_path=str(resume))
+    state: ApplicationState = {"resume_path": str(resume)}
     result = _parse_resume(state)
     resume_data = result.get("resume")
 
@@ -361,11 +373,11 @@ def _print_results(
     table.add_column("Status")
 
     for job in state.get("jobs", []):
-        title = job.title if hasattr(job, "title") else job.get("title", "Unknown")
-        company = job.company if hasattr(job, "company") else job.get("company", "Unknown")
-        fit_score = job.fit_score if hasattr(job, "fit_score") else job.get("fit_score", 0)
-        applied = job.applied if hasattr(job, "applied") else job.get("applied", False)
-        error = job.error if hasattr(job, "error") else job.get("error", "")
+        title = job.title
+        company = job.company
+        fit_score = job.fit_score
+        applied = job.applied
+        error = job.error
 
         if error:
             status = f"[red]Error: {error}[/red]"

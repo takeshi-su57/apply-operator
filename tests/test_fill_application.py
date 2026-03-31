@@ -53,7 +53,10 @@ def _make_state(**kwargs: Any) -> ApplicationState:
         "current_job_index": 0,
     }
     defaults.update(kwargs)
-    return ApplicationState(**defaults)
+    defaults.setdefault("total_applied", 0)
+    defaults.setdefault("total_skipped", 0)
+    defaults.setdefault("errors", [])
+    return defaults
 
 
 def _mock_page(url: str = "https://example.com/apply/1") -> AsyncMock:

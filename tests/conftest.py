@@ -87,13 +87,16 @@ def sample_jobs() -> list[JobListing]:
 @pytest.fixture
 def sample_state(sample_resume: ResumeData, sample_jobs: list[JobListing]) -> ApplicationState:
     """Sample application state for testing."""
-    return ApplicationState(
-        resume_path="test_resume.pdf",
-        job_urls=["https://example.com/jobs"],
-        resume=sample_resume,
-        jobs=sample_jobs,
-        current_job_index=0,
-    )
+    return {
+        "resume_path": "test_resume.pdf",
+        "job_urls": ["https://example.com/jobs"],
+        "resume": sample_resume,
+        "jobs": sample_jobs,
+        "current_job_index": 0,
+        "total_applied": 0,
+        "total_skipped": 0,
+        "errors": [],
+    }
 
 
 @pytest.fixture

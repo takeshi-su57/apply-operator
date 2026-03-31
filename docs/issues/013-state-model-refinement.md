@@ -5,23 +5,25 @@
 
 ## Description
 
-After the first working pipeline, refine `ApplicationState` based on what worked and what didn't. Evaluate migrating from Pydantic `BaseModel` to `TypedDict` with LangGraph reducers, and add/remove fields discovered during implementation.
+Migrate `ApplicationState` from Pydantic `BaseModel` to `TypedDict` with LangGraph reducers. The `errors` field now uses `Annotated[list[str], operator.add]` so each node returns only its new errors and the framework handles accumulation.
+
+`ResumeData` and `JobListing` remain Pydantic `BaseModel` for validation.
 
 ## Motivation
 
-- The initial state model was designed before implementation — real usage reveals gaps
-- LangGraph natively uses `TypedDict` with `Annotated` reducers; Pydantic may cause friction
-- Reducers prevent common bugs (e.g., `errors` being overwritten instead of appended)
+- LangGraph natively uses `TypedDict` with `Annotated` reducers
+- The `errors` field was fragile: nodes had to manually copy and re-include all prior errors (`[*state.errors, "new"]`), and a node returning `{"errors": ["new"]}` would silently overwrite all prior errors
+- With `operator.add` reducer, nodes return only new errors and the framework concatenates automatically
 
-## Proposed Solution
+## Implementation
 
-### Evaluate TypedDict migration
+### TypedDict with reducer
 
 ```python
-from typing import TypedDict, Annotated
 import operator
+from typing import Annotated, TypedDict
 
-class ApplicationState(TypedDict):
+class ApplicationState(TypedDict, total=False):
     resume_path: str
     job_urls: list[str]
     resume: ResumeData
@@ -29,39 +31,63 @@ class ApplicationState(TypedDict):
     current_job_index: int
     total_applied: int
     total_skipped: int
-    errors: Annotated[list[str], operator.add]  # append, don't replace
+    errors: Annotated[list[str], operator.add]
 ```
 
-### Reducer concept
+### Key behavioral change
 
-Without reducer: `errors` is replaced by the return value.
-With `operator.add` reducer: `errors` is **appended** to. Multiple nodes can add errors without overwriting each other.
+**Before:** Nodes had to manually preserve prior errors:
+```python
+errors = list(state.errors)
+errors.append("new error")
+return {"errors": errors}
+```
 
-### Potential new fields
+**After:** Nodes return only new errors:
+```python
+return {"errors": ["new error"]}
+```
 
-- `cover_letter: str` — if cover letter generation is added (issue 014)
-- `screenshots: list[str]` — debug screenshot paths
-- `start_time: float` — for duration tracking
+### State access pattern change
+
+All node and routing functions changed from attribute access to dict access:
+- `state.resume_path` -> `state["resume_path"]`
+- `state.jobs[idx]` -> `state["jobs"][idx]`
+- `state.resume.name` -> `state["resume"].name` (ResumeData is still Pydantic)
+
+### Streaming error accumulation
+
+In `main.py`, streaming events now contain only per-node errors. The `_run_graph` function accumulates errors with `extend()` instead of `update()`.
 
 ## Alternatives Considered
 
-- **Keep Pydantic** — if it works well in practice, no reason to migrate. Only migrate if you hit friction.
+- **Keep Pydantic** -- would avoid the migration effort, but the error overwrite bug was a real risk and LangGraph works better with TypedDict
 
 ## Acceptance Criteria
 
-- [ ] State model is clean, well-documented, with no unused fields
-- [ ] Reducers work correctly (errors append, not replace)
-- [ ] All nodes and tests updated for new state shape
-- [ ] All tests pass
-- [ ] `ruff check` and `mypy` pass
+- [x] State model is clean, well-documented, with no unused fields
+- [x] Reducers work correctly (errors append, not replace)
+- [x] All nodes and tests updated for new state shape
+- [x] All tests pass (193 tests)
+- [x] `ruff check` and `mypy` pass
 
 ## Files Touched
 
-- `src/apply_operator/state.py` — refine or migrate
-- `src/apply_operator/nodes/*.py` — update for new state shape
-- `src/apply_operator/graph.py` — update if TypedDict changes needed
-- `tests/conftest.py` — update fixtures
-- `tests/*.py` — update for new state shape
+- `src/apply_operator/state.py` -- `ApplicationState` migrated to TypedDict
+- `src/apply_operator/graph.py` -- dict access in routing functions
+- `src/apply_operator/nodes/parse_resume.py` -- dict access + reducer errors
+- `src/apply_operator/nodes/search_jobs.py` -- dict access + reducer errors
+- `src/apply_operator/nodes/analyze_fit.py` -- dict access + reducer errors
+- `src/apply_operator/nodes/fill_application.py` -- dict access + reducer errors
+- `src/apply_operator/nodes/report_results.py` -- dict access
+- `src/apply_operator/main.py` -- dict initial state, streaming error accumulation, simplified `_print_results`
+- `tests/conftest.py` -- `sample_state` fixture as dict
+- `tests/test_graph.py` -- dict state, dict access in fakes
+- `tests/test_checkpoint.py` -- dict state, dict access in fakes
+- `tests/test_parse_resume.py` -- dict state, updated error test
+- `tests/test_analyze_fit.py` -- dict state, updated error test
+- `tests/test_fill_application.py` -- dict state
+- `tests/test_search_jobs.py` -- dict state
 
 ## Related Issues
 

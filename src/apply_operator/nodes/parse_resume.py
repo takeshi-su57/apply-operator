@@ -28,7 +28,7 @@ def parse_resume(state: ApplicationState) -> dict[str, Any]:
 
     Uses PyMuPDF for text extraction, then LLM for structured parsing.
     """
-    raw_text = extract_text(state.resume_path)
+    raw_text = extract_text(state["resume_path"])
     prompt = PARSE_RESUME.format(resume_text=raw_text)
 
     try:
@@ -41,5 +41,5 @@ def parse_resume(state: ApplicationState) -> dict[str, Any]:
         raise
     except (json.JSONDecodeError, ValidationError) as e:
         resume = ResumeData(raw_text=raw_text)
-        return {"resume": resume, "errors": [*state.errors, f"Resume parse failed: {e}"]}
+        return {"resume": resume, "errors": [f"Resume parse failed: {e}"]}
     return {"resume": resume}

@@ -64,10 +64,10 @@ def _fake_analyze(scores: list[float]):  # type: ignore[no-untyped-def]
 
     def _analyze(state: ApplicationState) -> dict[str, Any]:
         nonlocal call_count
-        idx = state.current_job_index
-        if idx >= len(state.jobs):
+        idx = state["current_job_index"]
+        if idx >= len(state["jobs"]):
             return {}
-        updated_jobs = list(state.jobs)
+        updated_jobs = list(state["jobs"])
         updated_jobs[idx] = updated_jobs[idx].model_copy(update={"fit_score": scores[call_count]})
         call_count += 1
         return {"jobs": updated_jobs}
@@ -76,13 +76,13 @@ def _fake_analyze(scores: list[float]):  # type: ignore[no-untyped-def]
 
 
 def _fake_fill(state: ApplicationState) -> dict[str, Any]:
-    idx = state.current_job_index
-    jobs = list(state.jobs)
+    idx = state["current_job_index"]
+    jobs = list(state["jobs"])
     jobs[idx] = jobs[idx].model_copy(update={"applied": True})
     return {
         "jobs": jobs,
         "current_job_index": idx + 1,
-        "total_applied": state.total_applied + 1,
+        "total_applied": state["total_applied"] + 1,
     }
 
 
@@ -167,7 +167,7 @@ class TestCheckpointSaveAndResume:
 
         config = {"configurable": {"thread_id": "test-save-1"}}
         await graph.ainvoke(
-            ApplicationState(resume_path="test.pdf", job_urls=["https://example.com"]),
+            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0},
             config=config,
         )
 
@@ -186,7 +186,7 @@ class TestCheckpointSaveAndResume:
 
         config = {"configurable": {"thread_id": "test-no-rerun"}}
         await graph.ainvoke(
-            ApplicationState(resume_path="test.pdf", job_urls=["https://example.com"]),
+            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0},
             config=config,
         )
 
@@ -210,7 +210,7 @@ class TestCheckpointSaveAndResume:
         config1 = {"configurable": {"thread_id": "test-isolation-1"}}
         config2 = {"configurable": {"thread_id": "test-isolation-2"}}
 
-        initial = ApplicationState(resume_path="test.pdf", job_urls=["https://example.com"])
+        initial = {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
 
         result1 = await graph1.ainvoke(initial, config=config1)
         result2 = await graph2.ainvoke(initial, config=config2)
@@ -249,7 +249,7 @@ class TestCheckpointSaveAndResume:
             graph = build_graph(checkpointer=async_checkpoint_saver)
 
             config = {"configurable": {"thread_id": "test-resume"}}
-            initial = ApplicationState(resume_path="test.pdf", job_urls=["https://example.com"])
+            initial = {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
 
             with pytest.raises(RuntimeError, match="Simulated crash"):
                 await graph.ainvoke(initial, config=config)
@@ -284,7 +284,7 @@ class TestGetRunSummaries:
 
         config = {"configurable": {"thread_id": "test-list-completed"}}
         await graph.ainvoke(
-            ApplicationState(resume_path="test.pdf", job_urls=["https://example.com"]),
+            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0},
             config=config,
         )
 
@@ -319,7 +319,7 @@ class TestGetRunSummaries:
             config = {"configurable": {"thread_id": "test-list-interrupted"}}
             with pytest.raises(RuntimeError):
                 await graph.ainvoke(
-                    ApplicationState(resume_path="test.pdf", job_urls=["https://example.com"]),
+                    {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0},
                     config=config,
                 )
 
