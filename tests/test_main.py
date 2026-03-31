@@ -428,9 +428,7 @@ class TestRunCommand:
         urls_file = tmp_path / "urls.txt"
         urls_file.write_text("\n\n")
 
-        result = runner.invoke(
-            app, ["run", "--resume", str(resume_file), "--urls", str(urls_file)]
-        )
+        result = runner.invoke(app, ["run", "--resume", str(resume_file), "--urls", str(urls_file)])
         assert result.exit_code == 1
         assert "no urls" in result.output.lower()
 
@@ -444,9 +442,7 @@ class TestParseResumeCommand:
         from apply_operator.main import app
 
         runner = CliRunner()
-        result = runner.invoke(
-            app, ["parse-resume", "--resume", str(tmp_path / "nonexistent.pdf")]
-        )
+        result = runner.invoke(app, ["parse-resume", "--resume", str(tmp_path / "nonexistent.pdf")])
         assert result.exit_code == 1
         assert "not found" in result.output.lower()
 
