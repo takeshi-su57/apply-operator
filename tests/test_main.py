@@ -377,3 +377,105 @@ async def _async_iter(items: list[Any]) -> Any:
     """Helper to create an async iterator from a list."""
     for item in items:
         yield item
+
+
+# ---------------------------------------------------------------------------
+# CLI command tests (via typer CliRunner)
+# ---------------------------------------------------------------------------
+
+
+class TestRunCommand:
+    """Tests for the 'run' CLI command."""
+
+    def test_missing_resume_file_exits_1(self, tmp_path: Any) -> None:
+        from typer.testing import CliRunner
+
+        from apply_operator.main import app
+
+        runner = CliRunner()
+        urls_file = tmp_path / "urls.txt"
+        urls_file.write_text("https://example.com/jobs\n")
+
+        result = runner.invoke(
+            app, ["run", "--resume", str(tmp_path / "nonexistent.pdf"), "--urls", str(urls_file)]
+        )
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+    def test_missing_urls_file_exits_1(self, tmp_path: Any) -> None:
+        from typer.testing import CliRunner
+
+        from apply_operator.main import app
+
+        runner = CliRunner()
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"fake pdf")
+
+        result = runner.invoke(
+            app, ["run", "--resume", str(resume_file), "--urls", str(tmp_path / "nonexistent.txt")]
+        )
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+    def test_empty_urls_file_exits_1(self, tmp_path: Any) -> None:
+        from typer.testing import CliRunner
+
+        from apply_operator.main import app
+
+        runner = CliRunner()
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"fake pdf")
+        urls_file = tmp_path / "urls.txt"
+        urls_file.write_text("\n\n")
+
+        result = runner.invoke(
+            app, ["run", "--resume", str(resume_file), "--urls", str(urls_file)]
+        )
+        assert result.exit_code == 1
+        assert "no urls" in result.output.lower()
+
+
+class TestParseResumeCommand:
+    """Tests for the 'parse-resume' CLI command."""
+
+    def test_missing_file_exits_1(self, tmp_path: Any) -> None:
+        from typer.testing import CliRunner
+
+        from apply_operator.main import app
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app, ["parse-resume", "--resume", str(tmp_path / "nonexistent.pdf")]
+        )
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+
+class TestListRunsCommand:
+    """Tests for the 'list-runs' CLI command."""
+
+    def test_empty_runs(self, tmp_path: Any) -> None:
+        from typer.testing import CliRunner
+
+        from apply_operator.main import app
+
+        runner = CliRunner()
+        with patch.dict("os.environ", {"CHECKPOINT_DB": str(tmp_path / "empty.sqlite")}):
+            result = runner.invoke(app, ["list-runs"])
+        assert result.exit_code == 0
+        assert "no runs" in result.output.lower()
+
+
+class TestResumeCommand:
+    """Tests for the 'resume' CLI command."""
+
+    def test_no_checkpoint_exits_1(self, tmp_path: Any) -> None:
+        from typer.testing import CliRunner
+
+        from apply_operator.main import app
+
+        runner = CliRunner()
+        with patch.dict("os.environ", {"CHECKPOINT_DB": str(tmp_path / "empty.sqlite")}):
+            result = runner.invoke(app, ["resume", "run-nonexistent"])
+        assert result.exit_code == 1
+        assert "no checkpoint" in result.output.lower()
