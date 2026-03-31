@@ -1,5 +1,7 @@
 # apply-operator
 
+[![CI](https://github.com/takeshi-su57/apply-operator/actions/workflows/ci.yml/badge.svg)](https://github.com/takeshi-su57/apply-operator/actions/workflows/ci.yml)
+
 AI agent that automates job applications. Provide a resume PDF and job site URLs — the agent parses your resume, searches for relevant jobs, analyzes fit, fills application forms, and auto-submits.
 
 ## Features

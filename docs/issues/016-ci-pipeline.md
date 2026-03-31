@@ -13,65 +13,44 @@ Set up GitHub Actions CI to run lint, type check, and tests on every push to mai
 - Standard practice for any non-trivial project
 - CI badge in README signals project quality
 
-## Proposed Solution
+## Implementation
 
-Three parallel jobs: lint, type-check, test.
+### Workflow: `.github/workflows/ci.yml`
 
-```yaml
-name: CI
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+Three parallel jobs using `uv` (via `astral-sh/setup-uv@v4`) for fast installs:
 
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install -e ".[dev]"
-      - run: ruff check src/ tests/
-      - run: ruff format --check src/ tests/
+| Job | Steps |
+|-----|-------|
+| **lint** | `ruff check src/ tests/` + `ruff format --check src/ tests/` |
+| **type-check** | `mypy src/` |
+| **test** | `playwright install chromium --with-deps` + `pytest --cov=apply_operator` |
 
-  type-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install -e ".[dev]"
-      - run: mypy src/
+Triggers on push to `main` and all PRs targeting `main`. Uses `concurrency` to cancel in-progress runs when new commits are pushed.
 
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install -e ".[dev]"
-      - run: playwright install chromium --with-deps
-      - run: pytest --cov=apply_operator
+### CI badge
+
+Added to `README.md`:
+```markdown
+[![CI](https://github.com/takeshi-su57/apply-operator/actions/workflows/ci.yml/badge.svg)]
 ```
 
 ## Alternatives Considered
 
-- **GitLab CI** — GitHub Actions is standard for GitHub repos
-- **Pre-commit hooks only** — local-only, doesn't catch issues on other machines
+- **GitLab CI** -- GitHub Actions is standard for GitHub repos
+- **Pre-commit hooks only** -- local-only, doesn't catch issues on other machines
+- **pip instead of uv** -- uv is the project's package manager and significantly faster
 
 ## Acceptance Criteria
 
-- [ ] `.github/workflows/ci.yml` created
-- [ ] All 3 jobs (lint, type-check, test) pass on a PR
-- [ ] CI badge added to `README.md`
-- [ ] `ruff check` and `mypy` pass
+- [x] `.github/workflows/ci.yml` created
+- [x] All 3 jobs (lint, type-check, test) defined
+- [x] CI badge added to `README.md`
+- [x] `ruff check` and `mypy` pass locally
 
 ## Files Touched
 
-- `.github/workflows/ci.yml` — create
-- `README.md` — add CI badge
+- `.github/workflows/ci.yml` -- **new**: CI workflow
+- `README.md` -- added CI badge
 
 ## Related Issues
 
