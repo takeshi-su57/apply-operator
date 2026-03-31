@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -44,8 +45,13 @@ def skip_job(state: ApplicationState) -> dict[str, Any]:
     }
 
 
-def build_graph() -> CompiledStateGraph:  # type: ignore[type-arg]
+def build_graph(
+    checkpointer: BaseCheckpointSaver | None = None,  # type: ignore[type-arg]
+) -> CompiledStateGraph:  # type: ignore[type-arg]
     """Build and return the compiled job application agent graph.
+
+    Args:
+        checkpointer: Optional LangGraph checkpoint saver for state persistence.
 
     Flow:
         START -> parse_resume -> search_jobs -> analyze_fit
@@ -95,4 +101,4 @@ def build_graph() -> CompiledStateGraph:  # type: ignore[type-arg]
     # Terminal
     graph.add_edge("report_results", END)
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)

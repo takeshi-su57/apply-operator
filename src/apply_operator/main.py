@@ -53,17 +53,26 @@ def run(
         console.print("[red]No URLs found in the file.[/red]")
         raise typer.Exit(code=1)
 
-    console.print("[bold cyan]apply-operator[/bold cyan]")
-    console.print(f"  Resume: {resume}")
-    console.print(f"  Job URLs: {len(job_urls)} sites")
-    console.print()
-
+    from apply_operator.checkpoint import create_async_checkpointer, generate_thread_id
     from apply_operator.graph import build_graph
     from apply_operator.state import ApplicationState
 
-    graph = build_graph()
-    initial = ApplicationState(resume_path=str(resume), job_urls=job_urls)
-    result, total_duration, step_times = asyncio.run(_run_graph(graph, initial, verbose))
+    thread_id = generate_thread_id()
+
+    console.print("[bold cyan]apply-operator[/bold cyan]")
+    console.print(f"  Resume: {resume}")
+    console.print(f"  Job URLs: {len(job_urls)} sites")
+    console.print(f"  Run ID: {thread_id}")
+    console.print()
+
+    async def _run_with_checkpoint() -> tuple[dict[str, Any], float, dict[str, float]]:
+        async with create_async_checkpointer() as checkpointer:
+            graph = build_graph(checkpointer=checkpointer)
+            initial = ApplicationState(resume_path=str(resume), job_urls=job_urls)
+            config = {"configurable": {"thread_id": thread_id}}
+            return await _run_graph(graph, initial, verbose, config=config)
+
+    result, total_duration, step_times = asyncio.run(_run_with_checkpoint())
     _print_results(result, total_duration, step_times, verbose)
 
 
@@ -111,6 +120,7 @@ async def _run_graph(
     graph: Any,
     initial: Any,
     verbose: bool = False,
+    config: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], float, dict[str, float]]:
     """Stream graph execution with a live Rich progress panel."""
     final_state: dict[str, Any] = {}
@@ -129,7 +139,7 @@ async def _run_graph(
         console=console,
         refresh_per_second=4,
     ) as live:
-        async for event in graph.astream(initial, stream_mode="updates"):
+        async for event in graph.astream(initial, config=config, stream_mode="updates"):
             now = time.perf_counter()
 
             for node_name, node_output in event.items():
@@ -242,6 +252,97 @@ def parse_resume(
         institution = edu.get("institution", "")
         year = edu.get("year", "")
         table.add_row("Education", f"{degree}, {institution} ({year})")
+
+    console.print(table)
+
+
+@app.command(name="resume")
+def resume_run(
+    thread_id: str = typer.Argument(..., help="Run ID to resume (e.g. run-1711234567)"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed step output"),
+) -> None:
+    """Resume an interrupted run from its last checkpoint."""
+    import sqlite3
+
+    from apply_operator.checkpoint import create_async_checkpointer, create_checkpointer
+    from apply_operator.graph import build_graph
+
+    # Use sync checkpointer for pre-flight checks (get_state)
+    try:
+        with create_checkpointer() as sync_saver:
+            graph = build_graph(checkpointer=sync_saver)
+            config = {"configurable": {"thread_id": thread_id}}
+
+            try:
+                snapshot = graph.get_state(config)  # type: ignore[arg-type]
+            except sqlite3.DatabaseError:
+                console.print("[red]Checkpoint database is corrupted.[/red]")
+                raise typer.Exit(code=1) from None
+
+            if not snapshot.values:
+                console.print(f"[red]No checkpoint found for run: {thread_id}[/red]")
+                raise typer.Exit(code=1)
+
+            if not snapshot.next:
+                console.print(f"[yellow]Run {thread_id} already completed.[/yellow]")
+                raise typer.Exit(code=0)
+
+            next_nodes = ", ".join(snapshot.next)
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        console.print(f"[red]Failed to resume run: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[bold cyan]Resuming run: {thread_id}[/bold cyan]")
+    console.print(f"  Next node: {next_nodes}")
+    console.print()
+
+    # Use async checkpointer for actual streaming execution
+    async def _resume_with_checkpoint() -> tuple[dict[str, Any], float, dict[str, float]]:
+        async with create_async_checkpointer() as checkpointer:
+            g = build_graph(checkpointer=checkpointer)
+            cfg = {"configurable": {"thread_id": thread_id}}
+            return await _run_graph(g, None, verbose, config=cfg)
+
+    result, total_duration, step_times = asyncio.run(_resume_with_checkpoint())
+    _print_results(result, total_duration, step_times, verbose)
+
+
+@app.command(name="list-runs")
+def list_runs() -> None:
+    """Show past runs with their status."""
+    from apply_operator.checkpoint import create_checkpointer, get_run_summaries
+    from apply_operator.graph import build_graph
+
+    with create_checkpointer() as checkpointer:
+        graph = build_graph(checkpointer=checkpointer)
+        runs = get_run_summaries(checkpointer, graph)
+
+    if not runs:
+        console.print("[dim]No runs found.[/dim]")
+        return
+
+    table = Table(title="Past Runs")
+    table.add_column("Run ID", style="cyan")
+    table.add_column("Status")
+    table.add_column("Step", style="white")
+    table.add_column("Next Node", style="dim")
+
+    for run in runs:
+        if run["status"] == "completed":
+            status = "[green]Completed[/green]"
+        elif run["status"] == "interrupted":
+            status = "[yellow]Interrupted[/yellow]"
+        else:
+            status = "[dim]Unknown[/dim]"
+
+        table.add_row(
+            run["thread_id"],
+            status,
+            str(run["step"]),
+            run.get("next_node") or "—",
+        )
 
     console.print(table)
 
