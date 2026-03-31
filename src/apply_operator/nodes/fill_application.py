@@ -7,7 +7,6 @@ from typing import Any
 
 from playwright.async_api import Page
 
-from apply_operator.config import get_settings
 from apply_operator.prompts.form_filling import DETECT_FORM_PAGE_TYPE, MAP_FORM_FIELDS
 from apply_operator.state import ApplicationState, JobListing, ResumeData
 from apply_operator.tools.browser import (
@@ -16,11 +15,13 @@ from apply_operator.tools.browser import (
     get_page_text,
     get_page_with_session,
     handle_captcha_if_present,
+    navigate_with_retry,
     take_screenshot,
     wait_for_page_ready,
 )
 from apply_operator.tools.llm_provider import call_llm
 from apply_operator.tools.logging_utils import log_node
+from apply_operator.tools.retry import CaptchaBlockError, FatalConfigError, PageTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,11 @@ def _map_fields_with_llm(
     )
 
     try:
-        response = call_llm(prompt, purpose=f"map_form_fields for {job.title} at {job.company}")
+        response = call_llm(
+            prompt,
+            purpose=f"map_form_fields for {job.title} at {job.company}",
+            expect_json=True,
+        )
         cleaned = _strip_markdown_json(response)
         mapping = json.loads(cleaned)
         if not isinstance(mapping, dict):
@@ -261,9 +266,8 @@ async def fill_application(state: ApplicationState) -> dict[str, Any]:
 
     try:
         async with get_page_with_session(job.url) as page:
-            settings = get_settings()
             logger.info("Navigating to application page: %s", job.url)
-            await page.goto(job.url, timeout=settings.browser_timeout)
+            await navigate_with_retry(page, job.url)
             await wait_for_page_ready(page)
 
             # Pre-form CAPTCHA check
@@ -350,6 +354,19 @@ async def fill_application(state: ApplicationState) -> dict[str, Any]:
                 "errors": errors,
             }
 
+    except FatalConfigError:
+        raise
+    except (PageTimeoutError, CaptchaBlockError) as e:
+        msg = f"Skipped {job.title} at {job.company}: {e}"
+        logger.warning(msg)
+        jobs[idx] = job.model_copy(update={"error": str(e)})
+        errors.append(msg)
+        return {
+            "jobs": jobs,
+            "current_job_index": idx + 1,
+            "total_skipped": state.total_skipped + 1,
+            "errors": errors,
+        }
     except Exception as e:
         msg = f"Failed to apply to {job.title} at {job.company}: {e}"
         logger.error(msg)

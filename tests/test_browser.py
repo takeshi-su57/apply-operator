@@ -198,9 +198,7 @@ class TestGetPageWithSession:
         mock_context.new_page.assert_not_awaited()
 
     @patch("apply_operator.tools.browser.async_playwright")
-    async def test_closes_context_on_exit(
-        self, mock_playwright: MagicMock, tmp_path: Path
-    ) -> None:
+    async def test_closes_context_on_exit(self, mock_playwright: MagicMock, tmp_path: Path) -> None:
         user_data_dir = tmp_path / "example.com"
         mock_context = AsyncMock()
         mock_page = AsyncMock()

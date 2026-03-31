@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     browser_headless: bool = True
     browser_timeout: int = 30000
 
+    # Retry / timeouts
+    llm_timeout: int = 120000  # ms
+    llm_max_retries: int = 3
+    retry_base_delay: float = 1.0  # seconds
+
     # Logging
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 

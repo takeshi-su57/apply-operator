@@ -7,17 +7,18 @@ from typing import Any
 
 from playwright.async_api import Page
 
-from apply_operator.config import get_settings
 from apply_operator.prompts.job_matching import EXTRACT_JOBS
 from apply_operator.state import ApplicationState, JobListing
 from apply_operator.tools.browser import (
     get_page_text,
     get_page_with_session,
+    navigate_with_retry,
     wait_for_page_ready,
     wait_for_user,
 )
 from apply_operator.tools.llm_provider import call_llm
 from apply_operator.tools.logging_utils import log_node
+from apply_operator.tools.retry import CaptchaBlockError, FatalConfigError, PageTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -117,13 +118,8 @@ async def search_jobs(state: ApplicationState) -> dict[str, Any]:
         try:
             logger.info("Opening browser for %s", url)
             async with get_page_with_session(url) as page:
-                settings = get_settings()
                 logger.info("Navigating to %s", url)
-                await page.goto(
-                    url,
-                    timeout=settings.browser_timeout,
-                    wait_until="domcontentloaded",
-                )
+                await navigate_with_retry(page, url)
 
                 await wait_for_page_ready(page)
                 logger.info("Page loaded, checking for login wall")
@@ -139,6 +135,11 @@ async def search_jobs(state: ApplicationState) -> dict[str, Any]:
                         break
 
             logger.info("Found %d jobs from %s", len(all_jobs), url)
+        except FatalConfigError:
+            raise
+        except (PageTimeoutError, CaptchaBlockError) as e:
+            errors.append(f"Failed to search {url}: {e}")
+            logger.warning("Skipping %s: %s", url, e)
         except Exception as e:
             errors.append(f"Failed to search {url}: {e}")
             logger.error("Error searching %s: %s", url, e)
