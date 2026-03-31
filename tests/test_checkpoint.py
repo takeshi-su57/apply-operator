@@ -362,3 +362,119 @@ class TestGetRunSummaries:
 
             snapshot = await graph.aget_state(config)
             assert snapshot.next  # interrupted — has pending nodes
+
+
+# ---------------------------------------------------------------------------
+# Tests: async checkpointer creation
+# ---------------------------------------------------------------------------
+
+
+class TestCreateAsyncCheckpointer:
+    @pytest.mark.asyncio
+    async def test_creates_async_saver(self, tmp_path: Path) -> None:
+        from apply_operator.checkpoint import create_async_checkpointer
+
+        db_path = str(tmp_path / "async_test.sqlite")
+        async with create_async_checkpointer(db_path) as saver:
+            assert saver is not None
+        assert (tmp_path / "async_test.sqlite").exists()
+
+    @pytest.mark.asyncio
+    async def test_corrupted_db_fallback(self, tmp_path: Path) -> None:
+        from apply_operator.checkpoint import create_async_checkpointer
+
+        db_file = tmp_path / "corrupt_async.sqlite"
+        db_file.write_bytes(b"not a valid sqlite database!!")
+        async with create_async_checkpointer(str(db_file)) as saver:
+            assert saver is not None
+
+
+# ---------------------------------------------------------------------------
+# Tests: get_run_summaries with sync checkpointer
+# ---------------------------------------------------------------------------
+
+
+class TestGetRunSummariesSync:
+    def test_completed_run(self, checkpoint_saver: SqliteSaver) -> None:
+        """Sync get_run_summaries detects completed runs."""
+        from unittest.mock import MagicMock
+
+        from apply_operator.checkpoint import get_run_summaries
+
+        # Mock a graph with get_state returning empty next
+        mock_graph = MagicMock()
+        mock_snapshot = MagicMock()
+        mock_snapshot.next = ()
+        mock_graph.get_state.return_value = mock_snapshot
+
+        # Insert a fake checkpoint
+        checkpoint_saver.put(
+            config={
+                "configurable": {
+                    "thread_id": "test-sync-1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "",
+                }
+            },
+            checkpoint={"ts": "2026-03-31T00:00:00", "v": 1, "id": "cp-1", "channel_values": {}},
+            metadata={"step": 5, "source": "loop"},
+            new_versions={},
+        )
+
+        runs = get_run_summaries(checkpoint_saver, mock_graph)
+        assert len(runs) == 1
+        assert runs[0]["thread_id"] == "test-sync-1"
+        assert runs[0]["status"] == "completed"
+
+    def test_interrupted_run(self, checkpoint_saver: SqliteSaver) -> None:
+        from unittest.mock import MagicMock
+
+        from apply_operator.checkpoint import get_run_summaries
+
+        mock_graph = MagicMock()
+        mock_snapshot = MagicMock()
+        mock_snapshot.next = ("analyze_fit",)
+        mock_graph.get_state.return_value = mock_snapshot
+
+        checkpoint_saver.put(
+            config={
+                "configurable": {
+                    "thread_id": "test-sync-2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "",
+                }
+            },
+            checkpoint={"ts": "2026-03-31T00:00:00", "v": 1, "id": "cp-2", "channel_values": {}},
+            metadata={"step": 3, "source": "loop"},
+            new_versions={},
+        )
+
+        runs = get_run_summaries(checkpoint_saver, mock_graph)
+        assert len(runs) == 1
+        assert runs[0]["status"] == "interrupted"
+        assert runs[0]["next_node"] == "analyze_fit"
+
+    def test_get_state_exception_marks_unknown(self, checkpoint_saver: SqliteSaver) -> None:
+        from unittest.mock import MagicMock
+
+        from apply_operator.checkpoint import get_run_summaries
+
+        mock_graph = MagicMock()
+        mock_graph.get_state.side_effect = RuntimeError("boom")
+
+        checkpoint_saver.put(
+            config={
+                "configurable": {
+                    "thread_id": "test-sync-3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "",
+                }
+            },
+            checkpoint={"ts": "2026-03-31T00:00:00", "v": 1, "id": "cp-3", "channel_values": {}},
+            metadata={"step": 1, "source": "loop"},
+            new_versions={},
+        )
+
+        runs = get_run_summaries(checkpoint_saver, mock_graph)
+        assert len(runs) == 1
+        assert runs[0]["status"] == "unknown"

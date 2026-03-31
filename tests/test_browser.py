@@ -3,12 +3,17 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from apply_operator.tools.browser import (
     LinkInfo,
+    detect_captcha,
+    get_form_fields,
     get_page,
     get_page_links,
     get_page_text,
     get_page_with_session,
+    handle_captcha_if_present,
     session_path,
     take_screenshot,
     wait_for_user,
@@ -317,3 +322,111 @@ class TestTakeScreenshot:
 
         call_kwargs = mock_page.screenshot.call_args[1]
         assert call_kwargs["path"] == str(screenshots_dir / "capture.png")
+
+
+class TestDetectCaptcha:
+    """Tests for CAPTCHA detection."""
+
+    @pytest.mark.asyncio
+    async def test_detects_captcha_via_selector(self) -> None:
+        mock_page = AsyncMock()
+        visible_element = AsyncMock()
+        visible_element.is_visible.return_value = True
+        mock_page.query_selector.return_value = visible_element
+
+        result = await detect_captcha(mock_page)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_detects_captcha_via_text(self) -> None:
+        mock_page = AsyncMock()
+        mock_page.query_selector.return_value = None
+        mock_page.evaluate.return_value = "Please verify you are human to continue"
+
+        result = await detect_captcha(mock_page)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_no_captcha(self) -> None:
+        mock_page = AsyncMock()
+        mock_page.query_selector.return_value = None
+        mock_page.evaluate.return_value = "Welcome to our job board"
+
+        result = await detect_captcha(mock_page)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_handles_selector_exception(self) -> None:
+        mock_page = AsyncMock()
+        mock_page.query_selector.side_effect = Exception("selector error")
+        mock_page.evaluate.return_value = "Normal page"
+
+        result = await detect_captcha(mock_page)
+        assert result is False
+
+
+class TestHandleCaptchaIfPresent:
+    """Tests for handle_captcha_if_present."""
+
+    @pytest.mark.asyncio
+    async def test_calls_wait_when_captcha_detected(self) -> None:
+        mock_page = AsyncMock()
+
+        with (
+            patch("apply_operator.tools.browser.detect_captcha", return_value=True),
+            patch("apply_operator.tools.browser.wait_for_user") as mock_wait,
+            patch("apply_operator.tools.browser.wait_for_page_ready"),
+        ):
+            await handle_captcha_if_present(mock_page)
+            mock_wait.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_noop_when_no_captcha(self) -> None:
+        mock_page = AsyncMock()
+
+        with (
+            patch("apply_operator.tools.browser.detect_captcha", return_value=False),
+            patch("apply_operator.tools.browser.wait_for_user") as mock_wait,
+        ):
+            await handle_captcha_if_present(mock_page)
+            mock_wait.assert_not_called()
+
+
+class TestGetFormFields:
+    """Tests for form field extraction."""
+
+    @pytest.mark.asyncio
+    async def test_returns_fields_from_evaluate(self) -> None:
+        mock_page = AsyncMock()
+        mock_page.evaluate.return_value = [
+            {
+                "tag": "input",
+                "field_type": "text",
+                "name": "first_name",
+                "label": "First Name",
+                "required": True,
+                "selector": "#first_name",
+                "options": [],
+            },
+        ]
+
+        fields = await get_form_fields(mock_page)
+        assert len(fields) == 1
+        assert fields[0]["name"] == "first_name"
+        assert fields[0]["label"] == "First Name"
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_error(self) -> None:
+        mock_page = AsyncMock()
+        mock_page.evaluate.side_effect = Exception("JS error")
+
+        fields = await get_form_fields(mock_page)
+        assert fields == []
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_list_for_no_fields(self) -> None:
+        mock_page = AsyncMock()
+        mock_page.evaluate.return_value = []
+
+        fields = await get_form_fields(mock_page)
+        assert fields == []
