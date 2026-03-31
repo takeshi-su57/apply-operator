@@ -32,6 +32,7 @@ class TestGraphCompilation:
             "search_jobs",
             "analyze_fit",
             "skip_job",
+            "generate_cover_letter",
             "fill_application",
             "report_results",
         }
@@ -111,6 +112,11 @@ def _fake_fill(state: ApplicationState) -> dict[str, Any]:
     }
 
 
+def _noop_cover_letter(state: ApplicationState) -> dict[str, Any]:
+    """Mock generate_cover_letter: no-op (cover letter stays empty)."""
+    return {}
+
+
 def _noop_report(state: ApplicationState) -> dict[str, Any]:
     """Mock report_results: no-op."""
     return {}
@@ -130,6 +136,7 @@ class TestFullPipeline:
             patch("apply_operator.graph.parse_resume", _fake_parse),
             patch("apply_operator.graph.search_jobs", _fake_search(jobs)),
             patch("apply_operator.graph.analyze_fit", _fake_analyze(scores)),
+            patch("apply_operator.graph.generate_cover_letter", _noop_cover_letter),
             patch("apply_operator.graph.fill_application", _fake_fill),
         ]
         if mock_report:
@@ -152,7 +159,14 @@ class TestFullPipeline:
 
         graph = self._build_mocked_graph(jobs, scores)
         result = await graph.ainvoke(
-            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+            {
+                "resume_path": "test.pdf",
+                "job_urls": ["https://example.com"],
+                "errors": [],
+                "total_applied": 0,
+                "total_skipped": 0,
+                "current_job_index": 0,
+            }
         )
 
         assert result["total_applied"] == 2
@@ -169,7 +183,14 @@ class TestFullPipeline:
         """Pipeline terminates cleanly when no jobs are found."""
         graph = self._build_mocked_graph(jobs=[], scores=[])
         result = await graph.ainvoke(
-            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+            {
+                "resume_path": "test.pdf",
+                "job_urls": ["https://example.com"],
+                "errors": [],
+                "total_applied": 0,
+                "total_skipped": 0,
+                "current_job_index": 0,
+            }
         )
 
         assert result["total_applied"] == 0
@@ -183,7 +204,14 @@ class TestFullPipeline:
 
         graph = self._build_mocked_graph(jobs, scores)
         result = await graph.ainvoke(
-            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+            {
+                "resume_path": "test.pdf",
+                "job_urls": ["https://example.com"],
+                "errors": [],
+                "total_applied": 0,
+                "total_skipped": 0,
+                "current_job_index": 0,
+            }
         )
 
         assert result["total_applied"] == 0
@@ -198,7 +226,14 @@ class TestFullPipeline:
 
         graph = self._build_mocked_graph(jobs, scores)
         result = await graph.ainvoke(
-            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+            {
+                "resume_path": "test.pdf",
+                "job_urls": ["https://example.com"],
+                "errors": [],
+                "total_applied": 0,
+                "total_skipped": 0,
+                "current_job_index": 0,
+            }
         )
 
         assert result["total_applied"] == 2
@@ -213,7 +248,14 @@ class TestFullPipeline:
 
         graph = self._build_mocked_graph(jobs, scores)
         result = await graph.ainvoke(
-            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+            {
+                "resume_path": "test.pdf",
+                "job_urls": ["https://example.com"],
+                "errors": [],
+                "total_applied": 0,
+                "total_skipped": 0,
+                "current_job_index": 0,
+            }
         )
 
         assert result["total_applied"] == 1
@@ -228,7 +270,14 @@ class TestFullPipeline:
 
         graph = self._build_mocked_graph(jobs, scores)
         result = await graph.ainvoke(
-            {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+            {
+                "resume_path": "test.pdf",
+                "job_urls": ["https://example.com"],
+                "errors": [],
+                "total_applied": 0,
+                "total_skipped": 0,
+                "current_job_index": 0,
+            }
         )
 
         assert result["total_applied"] == 0
@@ -255,7 +304,14 @@ class TestFullPipeline:
             mock_path_obj.write_text.side_effect = lambda text: output_path.write_text(text)
 
             await graph.ainvoke(
-                {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+                {
+                    "resume_path": "test.pdf",
+                    "job_urls": ["https://example.com"],
+                    "errors": [],
+                    "total_applied": 0,
+                    "total_skipped": 0,
+                    "current_job_index": 0,
+                }
             )
 
         assert output_path.exists()
@@ -270,7 +326,14 @@ class TestFullPipeline:
         scores = [0.7]
 
         graph = self._build_mocked_graph(jobs, scores)
-        initial = {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+        initial = {
+            "resume_path": "test.pdf",
+            "job_urls": ["https://example.com"],
+            "errors": [],
+            "total_applied": 0,
+            "total_skipped": 0,
+            "current_job_index": 0,
+        }
 
         node_names: list[str] = []
         async for event in graph.astream(initial, stream_mode="updates"):
@@ -281,6 +344,7 @@ class TestFullPipeline:
         assert "parse_resume" in node_names
         assert "search_jobs" in node_names
         assert "analyze_fit" in node_names
+        assert "generate_cover_letter" in node_names
         assert "fill_application" in node_names
         assert "report_results" in node_names
 
@@ -294,7 +358,14 @@ class TestFullPipeline:
         graph1 = self._build_mocked_graph(jobs, scores)
         graph2 = self._build_mocked_graph(jobs, [0.8, 0.4])
 
-        initial = {"resume_path": "test.pdf", "job_urls": ["https://example.com"], "errors": [], "total_applied": 0, "total_skipped": 0, "current_job_index": 0}
+        initial = {
+            "resume_path": "test.pdf",
+            "job_urls": ["https://example.com"],
+            "errors": [],
+            "total_applied": 0,
+            "total_skipped": 0,
+            "current_job_index": 0,
+        }
 
         # Get result via ainvoke
         invoke_result = await graph1.ainvoke(initial)

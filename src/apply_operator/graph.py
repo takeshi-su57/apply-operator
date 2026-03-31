@@ -8,6 +8,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from apply_operator.nodes.analyze_fit import analyze_fit
 from apply_operator.nodes.fill_application import fill_application
+from apply_operator.nodes.generate_cover_letter import generate_cover_letter
 from apply_operator.nodes.parse_resume import parse_resume
 from apply_operator.nodes.report_results import report_results
 from apply_operator.nodes.search_jobs import search_jobs
@@ -55,7 +56,7 @@ def build_graph(
 
     Flow:
         START -> parse_resume -> search_jobs -> analyze_fit
-            -> [fit >= 0.6] -> fill_application -> (loop or report)
+            -> [fit >= 0.6] -> generate_cover_letter -> fill_application -> (loop or report)
             -> [fit < 0.6] -> skip_job -> analyze_fit (loop)
             -> [no more jobs] -> report_results -> END
     """
@@ -66,6 +67,7 @@ def build_graph(
     graph.add_node("search_jobs", search_jobs)
     graph.add_node("analyze_fit", analyze_fit)
     graph.add_node("skip_job", skip_job)
+    graph.add_node("generate_cover_letter", generate_cover_letter)
     graph.add_node("fill_application", fill_application)
     graph.add_node("report_results", report_results)
 
@@ -74,16 +76,19 @@ def build_graph(
     graph.add_edge("parse_resume", "search_jobs")
     graph.add_edge("search_jobs", "analyze_fit")
 
-    # Conditional: analyze_fit -> apply, skip, or report
+    # Conditional: analyze_fit -> cover letter + apply, skip, or report
     graph.add_conditional_edges(
         "analyze_fit",
         should_apply,
         {
-            "apply": "fill_application",
+            "apply": "generate_cover_letter",
             "skip": "skip_job",
             "report": "report_results",
         },
     )
+
+    # Cover letter flows into form filling
+    graph.add_edge("generate_cover_letter", "fill_application")
 
     # skip_job advances index and loops back to analyze next job
     graph.add_edge("skip_job", "analyze_fit")

@@ -115,6 +115,10 @@ def _map_fields_with_llm(
     Returns:
         Mapping of field name to value to fill in.
     """
+    cover_letter_section = ""
+    if job.cover_letter:
+        cover_letter_section = f"\nCover Letter:\n{job.cover_letter}"
+
     prompt = MAP_FORM_FIELDS.format(
         job_title=job.title or "Unknown Position",
         company=job.company or "Unknown Company",
@@ -126,6 +130,7 @@ def _map_fields_with_llm(
         skills=", ".join(resume.skills) if resume.skills else "None listed",
         experience=_format_experience(resume.experience),
         education=_format_education(resume.education),
+        cover_letter=cover_letter_section,
     )
 
     try:

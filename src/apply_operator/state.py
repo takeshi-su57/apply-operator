@@ -54,6 +54,7 @@ class JobListing(BaseModel):
     location: str = ""
     fit_score: float = 0.0
     applied: bool = False
+    cover_letter: str = ""
     error: str = ""
 
 
