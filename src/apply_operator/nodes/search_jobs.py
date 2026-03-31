@@ -9,6 +9,7 @@ from playwright.async_api import Page
 
 from apply_operator.prompts.job_matching import EXTRACT_JOBS
 from apply_operator.state import ApplicationState, JobListing
+from apply_operator.tools.adapters import get_adapter
 from apply_operator.tools.browser import (
     get_page_text,
     get_page_with_session,
@@ -128,11 +129,20 @@ async def search_jobs(state: ApplicationState) -> dict[str, Any]:
                     await wait_for_page_ready(page)
 
                 logger.info("Extracting jobs from %s", url)
-                while True:
-                    page_jobs = await _extract_jobs_from_page(page, url)
-                    all_jobs.extend(page_jobs)
-                    if not await _find_next_page(page):
-                        break
+                adapter = get_adapter(url)
+                if adapter:
+                    logger.info("Using %s adapter for %s", adapter.domain, url)
+                    while True:
+                        page_jobs = await adapter.search_jobs(page, url)
+                        all_jobs.extend(page_jobs)
+                        if not await adapter.find_next_page(page):
+                            break
+                else:
+                    while True:
+                        page_jobs = await _extract_jobs_from_page(page, url)
+                        all_jobs.extend(page_jobs)
+                        if not await _find_next_page(page):
+                            break
 
             logger.info("Found %d jobs from %s", len(all_jobs), url)
         except FatalConfigError:
